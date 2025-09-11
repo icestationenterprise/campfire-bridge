@@ -1,0 +1,11 @@
+[Unit]
+Description=Bluetooth Auto Reconnect
+After=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/home/bridge/bt_connect.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

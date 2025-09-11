@@ -1,0 +1,18 @@
+[Unit]
+Description=librespot
+After=network.target pulseaudio.service
+
+[Service]
+User=bridge
+ExecStart=/usr/local/bin/librespot
+--name "Campfire Bridge"
+--bitrate 320
+--backend pulseaudio
+--device-type speaker
+--cache /home/bridge/.cache/librespot
+--initial-volume 75
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

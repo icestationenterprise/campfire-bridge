@@ -1,0 +1,12 @@
+[Unit]
+Description=Shairport Sync - AirPlay receiver
+After=sound.target
+Requires=avahi-daemon.service
+
+[Service]
+ExecStart=/usr/local/bin/shairport-sync
+User=shairport
+Group=shairport
+
+[Install]
+WantedBy=multi-user.target
