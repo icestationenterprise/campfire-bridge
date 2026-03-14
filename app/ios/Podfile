@@ -1,0 +1,36 @@
+platform :ios, '12.4'
+
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+
+target 'Campfire' do
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    :hermes_enabled => true
+  )
+
+  post_install do |installer|
+    react_native_post_install(installer)
+
+    installer.pods_project.targets.each do |t|
+      next unless t.name == 'RCT-Folly'
+
+      t.build_configurations.each do |config|
+        # Coerce to array (avoids accidental String << concatenation)
+        defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS']
+        defs = Array(defs).compact
+        defs << '$(inherited)' unless defs.include?('$(inherited)')
+
+        %w[FOLLY_HAVE_CLOCK_GETTIME=1 HAVE_CLOCK_GETTIME=1].each do |macro|
+          defs << macro unless defs.include?(macro)
+        end
+
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+        config.build_settings['GCC_C_LANGUAGE_STANDARD']   = 'gnu11'
+      end
+    end
+  end
+end

@@ -1,1 +1,53 @@
-{"name":"campfire-bridge-app","version":"1.0.0","private":true,"scripts":{"start":"react-native start","android":"react-native run-android","ios":"react-native run-ios","test":"jest","lint":"eslint . --ext .js,.jsx,.ts,.tsx"},"dependencies":{"@react-native-community/netinfo":"^9.3.0","axios":"^1.4.0","jwt-decode":"^3.1.2","react":"18.2.0","react-native":"0.72.0","react-native-ble-manager":"^10.0.0","react-native-config":"^1.5.0","react-native-device-info":"^10.0.0","react-native-permissions":"^3.8.0","react-native-zeroconf":"^0.13.8"},"devDependencies":{"@babel/core":"^7.20.0","@babel/preset-env":"^7.20.0","@babel/runtime":"^7.20.0","@react-native/eslint-config":"^0.72.0","@react-native/metro-config":"^0.72.0","@tsconfig/react-native":"^3.0.0","@types/jest":"^29.2.1","@types/react":"^18.0.24","@types/react-native-zeroconf":"^0.13.1","@types/react-test-renderer":"^18.0.0","babel-jest":"^29.2.1","eslint":"^8.19.0","jest":"^29.2.1","metro-react-native-babel-preset":"0.76.0","react-test-renderer":"18.2.0","typescript":"5.0.4"},"engines":{"node":">=16"}}
+{
+  "name": "campfire-app",
+  "private": true,
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "react-native start",
+    "ios": "react-native run-ios",
+    "mock": "node mock-bridge.js",
+    "mock:mac": "node bt-bridge-mac.js",
+    "test": "jest --forceExit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/slider": "^4.5.7",
+    "@react-navigation/bottom-tabs": "^6.5.20",
+    "@react-navigation/native": "6.1.17",
+    "@react-navigation/stack": "6.3.29",
+    "axios": "^1.12.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "play-sound": "^1.1.6",
+    "react": "18.2.0",
+    "react-native": "0.72.0",
+    "react-native-ble-manager": "^12.2.0",
+    "react-native-config": "^1.5.9",
+    "react-native-gesture-handler": "2.12.1",
+    "react-native-safe-area-context": "4.5.0",
+    "react-native-screens": "3.29.0",
+    "react-native-vector-icons": "^10.3.0",
+    "react-native-zeroconf": "^0.13.8",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@react-native-community/cli": "10.2.2",
+    "@react-native-community/cli-platform-ios": "10.2.1",
+    "@react-native/metro-config": "^0.73.5",
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react-native": "^12.4.3",
+    "@types/react": "18.2.79",
+    "@types/react-native": "0.72.8",
+    "@types/react-native-vector-icons": "^6.4.18",
+    "babel-plugin-module-resolver": "^5.0.0",
+    "jest-fetch-mock": "^3.0.3",
+    "patch-package": "^8.0.0",
+    "postinstall-postinstall": "^2.1.0",
+    "react-native-codegen": "^0.72.0",
+    "react-test-renderer": "18.2.0",
+    "supertest": "^6.3.4",
+    "ts-jest": "^29.2.0",
+    "typescript": "^5.9.2"
+  }
+}

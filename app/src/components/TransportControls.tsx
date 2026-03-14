@@ -1,56 +1,24 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Pressable } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-interface TransportControlsProps {
-isPlaying: boolean;
-onPlayPause: () => void;
-onNext: () => void;
-onPrevious: () => void;
+type Props = {
+  onPrev?: () => void;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onNext?: () => void;
+  isPlaying?: boolean;
+};
+
+export default function TransportControls({ onPrev, onPlay, onPause, onNext, isPlaying }: Props) {
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', padding: 12 }}>
+      <Pressable onPress={onPrev}><Icon name="skip-previous" size={36} /></Pressable>
+      {isPlaying
+        ? <Pressable onPress={onPause}><Icon name="pause-circle-filled" size={52} /></Pressable>
+        : <Pressable onPress={onPlay}><Icon name="play-circle-fill" size={52} /></Pressable>
+      }
+      <Pressable onPress={onNext}><Icon name="skip-next" size={36} /></Pressable>
+    </View>
+  );
 }
-
-export default function TransportControls({
-isPlaying,
-onPlayPause,
-onNext,
-onPrevious,
-}: TransportControlsProps) {
-return (
-<View style={styles.container}>
-<TouchableOpacity onPress={onPrevious} style={styles.button}>
-<Icon name="skip-previous" size={40} color="#000" />
-</TouchableOpacity>
-
-<TouchableOpacity onPress={onPlayPause} style={styles.playButton}>
-<Icon
-name={isPlaying ? "pause" : "play-arrow"}
-size={50}
-color="#fff"
-/>
-</TouchableOpacity>
-
-<TouchableOpacity onPress={onNext} style={styles.button}>
-<Icon name="skip-next" size={40} color="#000" />
-</TouchableOpacity>
-</View>
-);
-}
-
-const styles = StyleSheet.create({
-container: {
-flexDirection: 'row',
-alignItems: 'center',
-marginBottom: 30,
-},
-button: {
-marginHorizontal: 20,
-},
-playButton: {
-backgroundColor: '#000',
-borderRadius: 30,
-width: 60,
-height: 60,
-alignItems: 'center',
-justifyContent: 'center',
-},
-});

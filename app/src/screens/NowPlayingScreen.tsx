@@ -1,59 +1,62 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
-import TransportControls from '../components/TransportControls';
-import VolumeSlider from '../components/VolumeSlider';
-import { useBridge } from '../context/BridgeContext';
+import React from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  SafeAreaView,
+} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import type { StackScreenProps } from '@react-navigation/stack';
+import type { MusicStackParamList } from '../../App';
+import Player from '../components/Player';
+import { useSpotify } from '../context/SpotifyContext';
 
-export default function NowPlayingScreen() {
-const { track, isPlaying } = useBridge();
-const [volume, setVolume] = useState(75);
+type Props = StackScreenProps<MusicStackParamList, 'NowPlaying'>;
 
-return (
-<View style={styles.container}>
-<Image
-source={{ uri: track?.albumArt || 'https://via.placeholder.com/300 ' }}
-style={styles.albumArt}
-/>
-<Text style={styles.title}>{track?.name || 'No track playing'}</Text>
-<Text style={styles.artist}>{track?.artist || 'Unknown artist'}</Text>
+export default function NowPlayingScreen({ navigation }: Props) {
+  const { isAuthenticated } = useSpotify();
 
-<TransportControls
-isPlaying={isPlaying}
-onPlayPause={() => {}}
-onNext={() => {}}
-onPrevious={() => {}}
-/>
+  return (
+    <SafeAreaView style={styles.root}>
+      {/* Spotify connect banner — shown when not yet authenticated */}
+      {!isAuthenticated && (
+        <Pressable
+          style={styles.spotifyBanner}
+          onPress={() => navigation.navigate('SpotifyLogin')}
+          accessibilityLabel="Connect Spotify to browse and search music"
+        >
+          <Icon name="library-music" size={20} color="#1db954" />
+          <Text style={styles.spotifyBannerText}>Connect Spotify to browse music</Text>
+          <Icon name="chevron-right" size={20} color="#1db954" />
+        </Pressable>
+      )}
 
-<VolumeSlider
-value={volume}
-onValueChange={setVolume}
-/>
-</View>
-);
+      {/* The player fills the rest of the screen */}
+      <Player />
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-container: {
-flex: 1,
-alignItems: 'center',
-justifyContent: 'center',
-padding: 20,
-},
-albumArt: {
-width: 300,
-height: 300,
-borderRadius: 10,
-marginBottom: 20,
-},
-title: {
-fontSize: 24,
-fontWeight: 'bold',
-textAlign: 'center',
-marginBottom: 10,
-},
-artist: {
-fontSize: 18,
-color: '#666',
-marginBottom: 30,
-},
+  root: {
+    flex: 1,
+    backgroundColor: '#121212',
+  },
+  spotifyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#282828',
+  },
+  spotifyBannerText: {
+    flex: 1,
+    color: '#1db954',
+    fontSize: 13,
+    fontWeight: '500',
+  },
 });

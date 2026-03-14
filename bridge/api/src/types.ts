@@ -1,21 +1,22 @@
-export interface Device {
-id: string;
-name: string;
-type: string;
-is_active: boolean;
-}
+export type Track = {
+  title: string;
+  artist: string;
+  album?: string;
+  art_url?: string;
+  position_ms: number;
+  duration_ms: number;
+};
 
-export interface Track {
-id: string;
-name: string;
-artists: string[];
-album: string;
-duration_ms: number;
-}
+export type BridgeStatus = {
+  device: string;
+  connected: boolean;
+  playing: boolean;
+  track: Track;
+  volume: number; // 0–100
+};
 
-export interface PlaybackState {
-is_playing: boolean;
-progress_ms: number;
-device: Device;
-track: Track;
-}
+export type BluetoothDevice = {
+  mac: string;
+  name: string;
+  connected: boolean;
+};

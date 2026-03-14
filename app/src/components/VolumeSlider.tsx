@@ -1,39 +1,29 @@
 import React from 'react';
-import { View, Text, Slider, StyleSheet } from 'react-native';
+import Slider from '@react-native-community/slider';
+import { View, Text } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
-interface VolumeSliderProps {
-value: number;
-onValueChange: (value: number) => void;
+type Props = {
+  value: number;
+  onChange: (v: number) => void;
+};
+
+export default function VolumeSlider({ value, onChange }: Props) {
+  return (
+    <View style={{ paddingHorizontal: 16 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Icon name="volume-mute" size={20} />
+        <Slider
+          style={{ flex: 1, marginHorizontal: 8 }}
+          minimumValue={0}
+          maximumValue={100}
+          value={value}
+          onValueChange={(v) => onChange(Math.round(v))}
+          step={1}
+        />
+        <Icon name="volume-up" size={20} />
+      </View>
+      <Text style={{ textAlign: 'center', marginTop: 4 }}>{value}%</Text>
+    </View>
+  );
 }
-
-export default function VolumeSlider({ value, onValueChange }: VolumeSliderProps) {
-return (
-<View style={styles.container}>
-<Icon name="volume-down" size={24} color="#000" />
-<Slider
-style={styles.slider}
-minimumValue={0}
-maximumValue={100}
-value={value}
-onValueChange={onValueChange}
-minimumTrackTintColor="#000"
-maximumTrackTintColor="#ccc"
-thumbStyle={{ backgroundColor: '#000' }}
-/>
-<Icon name="volume-up" size={24} color="#000" />
-</View>
-);
-}
-
-const styles = StyleSheet.create({
-container: {
-flexDirection: 'row',
-alignItems: 'center',
-width: '80%',
-marginBottom: 20,
-},
-slider: {
-flex: 1,
-marginHorizontal: 10,
-},
-});

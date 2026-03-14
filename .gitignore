@@ -1,43 +1,49 @@
-# Dependencies
+# ── Dependencies ──────────────────────────────────────────────────────────────
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+.npm
 
-# Production
-/build
-/dist
+# ── Build output ──────────────────────────────────────────────────────────────
+dist/
+build/
 
-# Misc
+# ── Environment ───────────────────────────────────────────────────────────────
 .env
-.DS_Store
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*.local
 
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# ── iOS ───────────────────────────────────────────────────────────────────────
+app/ios/Pods/
+app/ios/build/
+app/ios/**/*.xcworkspace/xcuserdata/
+app/ios/Podfile.lock
+*.xcuserstate
+*.hmap
 
-# Editor directories and files
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-*.swp
-*.vimrc
+# ── Android ───────────────────────────────────────────────────────────────────
+app/android/local.properties
+app/android/app/debug/
+app/android/app/release/
+app/android/.gradle/
+app/android/build/
 
-# OS generated files
+# ── React Native ──────────────────────────────────────────────────────────────
+app/.expo/
+app/metro-cache/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
 Thumbs.db
 
-# Android
-/android/local.properties
-/android/app/debug/
-/android/app/release/
+# ── Editor ────────────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+*.swp
 
-# iOS
-/ios/build/
-/ios/Pods/
-/ios/*.xcworkspace/xcuserdata/
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Bridge ────────────────────────────────────────────────────────────────────
+bridge/api/event-hook.sh

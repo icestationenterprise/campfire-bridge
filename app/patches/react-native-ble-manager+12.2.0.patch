@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-native-ble-manager/ios/BleManager.mm b/node_modules/react-native-ble-manager/ios/BleManager.mm
+index 632a890..239efd0 100644
+--- a/node_modules/react-native-ble-manager/ios/BleManager.mm
++++ b/node_modules/react-native-ble-manager/ios/BleManager.mm
+@@ -1,3 +1,8 @@
++// React headers FIRST so RCTResponseSenderBlock is known
++#import <React/RCTBridgeModule.h>
++#import <React/RCTEventEmitter.h>
++#import <React/RCTLog.h>
++
+ #import <BleManager.h>
+ #if __has_include("RNBleManager-Swift.h")
+ #import <RNBleManager-Swift.h>

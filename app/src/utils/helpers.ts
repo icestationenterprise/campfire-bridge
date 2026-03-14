@@ -1,25 +1,20 @@
+export function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
 export function formatTime(ms: number): string {
-const minutes = Math.floor(ms / 60000);
-const seconds = Math.floor((ms % 60000) / 1000);
-return ${minutes}:${seconds < 10 ? '0' : ''}${seconds};
+  if (!Number.isFinite(ms)) return '0:00';
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return `${m}:${s}`;
 }
 
-export function validateIpAddress(ip: string): boolean {
-const ipRegex = /^(\d{1,3}.){3}\d{1,3}$/;
-if (!ipRegex.test(ip)) return false;
-
-const parts = ip.split('.');
-return parts.every(part => parseInt(part, 10) <= 255);
-}
-
-export function debounce(func: Function, wait: number) {
-let timeout: NodeJS.Timeout;
-return function executedFunction(...args: any[]) {
-const later = () => {
-clearTimeout(timeout);
-func(...args);
-};
-clearTimeout(timeout);
-timeout = setTimeout(later, wait);
-};
+export function toQueryString(obj: Record<string, string | number | boolean | undefined>) {
+  const usp = new URLSearchParams();
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === undefined) continue;
+    usp.append(k, String(v));
+  }
+  return usp.toString();
 }

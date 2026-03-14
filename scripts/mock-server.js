@@ -1,75 +1,50 @@
-// Mock server for development
 const express = require('express');
+const cors = require('cors');
 const http = require('http');
 const WebSocket = require('ws');
 
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
-
+app.use(cors());
 app.use(express.json());
 
-// Mock API endpoints
-app.get('/api/health', (req, res) => {
-res.json({ status: 'ok' });
-});
+let token = 'dev-token';
+let volume = 50;
 
 app.post('/api/login', (req, res) => {
-const { pass } = req.body;
-if (pass === 'campfire') {
-res.json({ token: 'mock-jwt-token' });
-} else {
-res.status(401).json({ error: 'Unauthorized' });
-}
+  const { password } = req.body || {};
+  if (!password) return res.status(400).json({ error: 'password required' });
+  return res.json({ token });
 });
 
 app.get('/api/status', (req, res) => {
-res.json({
-isPlaying: true,
-track: {
-id: '1',
-name: 'Mock Track',
-artist: 'Mock Artist',
-album: 'Mock Album',
-duration_ms: 240000,
-progress_ms: 120000
-},
-device: {
-id: 'bridge-1',
-name: 'Campfire Bridge',
-type: 'speaker'
-}
-});
+  res.json({ running: true, ts: Date.now(), volume });
 });
 
-// WebSocket mock
+app.post('/api/volume', (req, res) => {
+  volume = Math.max(0, Math.min(100, Number(req.body?.level ?? 0)));
+  broadcast({ type: 'status', payload: { running: true, ts: Date.now(), volume } });
+  res.json({ ok: true, volume });
+});
+
+app.post('/api/command', (req, res) => {
+  res.json({ ok: true, echo: req.body });
+});
+
+app.get('/', (_, res) => res.send('mock bridge ok'));
+
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server, path: '/ws' });
+
+function broadcast(msg) {
+  const data = JSON.stringify(msg);
+  for (const client of wss.clients) {
+    if (client.readyState === WebSocket.OPEN) client.send(data);
+  }
+}
+
 wss.on('connection', (ws) => {
-console.log('Client connected');
-
-// Send mock updates
-const interval = setInterval(() => {
-ws.send(JSON.stringify({
-type: 'status',
-data: {
-isPlaying: true,
-track: {
-id: '1',
-name: 'Mock Track',
-artist: 'Mock Artist',
-album: 'Mock Album',
-duration_ms: 240000,
-progress_ms: Math.floor(Math.random() * 240000)
-}
-}
-}));
-}, 5000);
-
-ws.on('close', () => {
-clearInterval(interval);
-});
+  ws.send(JSON.stringify({ type: 'status', payload: { running: true, ts: Date.now(), volume } }));
 });
 
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-console.log(Mock server running on port ${PORT});
-});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Mock bridge listening on ${PORT}`));

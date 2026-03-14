@@ -1,59 +1,42 @@
-import { useEffect, useState } from 'react';
+type Listener = (payload: any) => void;
 
-const WS_BASE = process.env.WS_BASE_URL || 'ws://localhost:8080';
+export class WebSocketService {
+  private ws: WebSocket | null = null;
+  private listeners: Record<string, Set<Listener>> = {};
 
-class WebSocketService {
-private ws: WebSocket | null = null;
-private listeners: (( any) => void)[] = [];
+  connect(url: string) {
+    if (this.ws) this.ws.close();
+    this.ws = new WebSocket(url);
+    this.ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data as any);
+        if (msg && msg.type) this.emit(msg.type, msg.payload);
+      } catch {
+        // ignore
+      }
+    };
+    this.ws.onclose = () => { this.emit('disconnect', null); };
+    this.ws.onopen = () => { this.emit('connect', null); };
+  }
 
-connect() {
-this.ws = new WebSocket(${WS_BASE}/ws);
+  send(type: string, payload?: any) {
+    if (!this.ws || this.ws.readyState !== 1) return;
+    this.ws.send(JSON.stringify({ type, payload }));
+  }
 
-this.ws.onmessage = (event) => {
-const data = JSON.parse(event.data);
-this.listeners.forEach(listener => listener(data));
-};
+  addListener(type: string, cb: Listener) {
+    if (!this.listeners[type]) this.listeners[type] = new Set();
+    this.listeners[type].add(cb);
+  }
 
-this.ws.onclose = () => {
-// Reconnect after 5 seconds
-setTimeout(() => this.connect(), 5000);
-};
+  removeListener(type: string, cb: Listener) {
+    this.listeners[type]?.delete(cb);
+  }
+
+  private emit(type: string, payload: any) {
+    this.listeners[type]?.forEach((cb) => cb(payload));
+  }
 }
 
-disconnect() {
-if (this.ws) {
-this.ws.close();
-this.ws = null;
-}
-}
-
-addListener(listener: ( any) => void) {
-this.listeners.push(listener);
-}
-
-removeListener(listener: ( any) => void) {
-this.listeners = this.listeners.filter(l => l !== listener);
-}
-}
-
-export default new WebSocketService();
-
-// Hook for React components
-export function useWebSocket() {
-const [data, setData] = useState<any>(null);
-
-useEffect(() => {
-const listener = (newData: any) => setData(newData);
-WebSocketService.addListener(listener);
-
-if (!WebSocketService['ws']) {
-WebSocketService.connect();
-}
-
-return () => {
-WebSocketService.removeListener(listener);
-};
-}, []);
-
-return data;
-}
+export const ws = new WebSocketService();
+export function useWebSocket() { return ws; } // simple helper to keep your imports stable

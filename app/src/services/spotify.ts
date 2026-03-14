@@ -1,65 +1,40 @@
 import axios from 'axios';
 
-const SPOTIFY_AUTH_BASE = 'https://accounts.spotify.com ';
-const SPOTIFY_API_BASE = 'https://api.spotify.com/v1 ';
+const SPOTIFY_API = 'https://api.spotify.com/v1';
 
-class SpotifyService {
-private clientId: string;
-private redirectUri: string;
-private token: string | null = null;
-
-constructor() {
-this.clientId = process.env.SPOTIFY_CLIENT_ID || '';
-this.redirectUri = process.env.SPOTIFY_REDIRECT_URI || 'http://localhost:3000/callback ';
+/** Build the Spotify authorize URL (PKCE not implemented; this is a simple dev helper). */
+export function buildSpotifyAuthorizeURL(options: {
+  clientId: string;
+  redirectURI: string;
+  scope?: string;
+  state?: string;
+}) {
+  const { clientId, redirectURI, scope = 'user-read-playback-state user-modify-playback-state', state = '' } = options;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: 'code',
+    redirect_uri: redirectURI,
+    scope,
+    state
+  });
+  return `https://accounts.spotify.com/authorize?${params.toString()}`;
 }
 
-getAuthUrl(): string {
-const scope = 'user-read-private user-read-email user-modify-playback-state user-read-playback-state';
-return ${SPOTIFY_AUTH_BASE}/authorize? +
-client_id=${this.clientId} +
-&response_type=code +
-&redirect_uri=${encodeURIComponent(this.redirectUri)} +
-&scope=${encodeURIComponent(scope)};
+export async function play(accessToken: string, body: { uris?: string[]; context_uri?: string; position_ms?: number; device_id?: string } = {}) {
+  await axios.put(`${SPOTIFY_API}/me/player/play`, body, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
 }
 
-async exchangeCodeForToken(code: string): Promise<string> {
-// Implement PKCE token exchange
-return 'mock_token';
+export async function pause(accessToken: string) {
+  await axios.put(`${SPOTIFY_API}/me/player/pause`, {}, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
 }
 
-async getDevices(): Promise<any[]> {
-if (!this.token) throw new Error('Not authenticated');
-
-const response = await axios.get(`${SPOTIFY_API_BASE}/me/player/devices`, {
-headers: { Authorization: `Bearer ${this.token}` }
-});
-return response.data.devices;
+export async function setVolume(accessToken: string, volumePercent: number) {
+  const params = new URLSearchParams({ volume_percent: String(volumePercent) });
+  await axios.put(`${SPOTIFY_API}/me/player/volume?${params.toString()}`, {}, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
 }
-
-async transferPlayback(deviceId: string): Promise<void> {
-if (!this.token) throw new Error('Not authenticated');
-
-await axios.put(`${SPOTIFY_API_BASE}/me/player`, {
-device_ids: [deviceId],
-play: true
-}, {
-headers: { Authorization: `Bearer ${this.token}` }
-});
-}
-
-async play(): Promise<void> {
-if (!this.token) throw new Error('Not authenticated');
-await axios.put(${SPOTIFY_API_BASE}/me/player/play, {}, {
-headers: { Authorization: Bearer ${this.token} }
-});
-}
-
-async pause(): Promise<void> {
-if (!this.token) throw new Error('Not authenticated');
-await axios.put(${SPOTIFY_API_BASE}/me/player/pause, {}, {
-headers: { Authorization: Bearer ${this.token} }
-});
-}
-}
-
-export default new SpotifyService();
