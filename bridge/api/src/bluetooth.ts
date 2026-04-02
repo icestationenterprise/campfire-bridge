@@ -1,12 +1,10 @@
 /**
  * Wrapper around `bluetoothctl` for managing Bluetooth devices on the Pi.
- *
- * Parses the text output of bluetoothctl commands into structured data.
  */
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import type { BluetoothDevice } from './types';
+import type { BluetoothDevice, DiscoveredDevice } from './types';
 
 const execAsync = promisify(exec);
 
@@ -21,30 +19,62 @@ async function btctl(cmd: string): Promise<string> {
 
 /**
  * Returns all paired Bluetooth devices with their current connection status.
- * Checking each device's status is done in parallel for speed.
  */
 export async function listDevices(): Promise<BluetoothDevice[]> {
-  const output = await btctl('paired-devices');
+  const output = await btctl('devices Paired');
 
   const macs: { mac: string; name: string }[] = [];
   for (const line of output.split('\n')) {
-    // Format: "Device AA:BB:CC:DD:EE:FF Device Name"
     const match = line.match(/^Device\s+([A-F0-9:]{17})\s+(.+)$/);
-    if (match) {
-      macs.push({ mac: match[1], name: match[2].trim() });
-    }
+    if (match) macs.push({ mac: match[1], name: match[2].trim() });
   }
 
-  // Check connection status for all devices in parallel
   const devices = await Promise.all(
     macs.map(async ({ mac, name }) => {
       const info = await btctl(`info ${mac}`);
-      const connected = info.includes('Connected: yes');
-      return { mac, name, connected };
+      return { mac, name, connected: info.includes('Connected: yes') };
     }),
   );
 
   return devices;
+}
+
+/**
+ * Run a timed Bluetooth scan and return all discovered devices (paired and new).
+ * Uses `bluetoothctl --timeout` which exits cleanly after the scan period.
+ */
+export async function scanDevices(durationSec = 5): Promise<DiscoveredDevice[]> {
+  const paired = await listDevices();
+  const pairedMacs = new Set(paired.map(d => d.mac));
+
+  // Run a timed scan (bluetoothctl --timeout N scan on exits when done)
+  try {
+    await execAsync(`bluetoothctl --timeout ${durationSec} scan on 2>/dev/null`, {
+      timeout: (durationSec + 5) * 1000,
+    });
+  } catch {
+    // timeout exit is expected and normal
+  }
+
+  // Retrieve all devices the adapter has seen (persists after scan ends)
+  const devicesOut = await btctl('devices');
+
+  const seen = new Set<string>();
+  const discovered: DiscoveredDevice[] = [];
+
+  for (const line of devicesOut.split('\n')) {
+    const match = line.match(/^Device\s+([A-F0-9:]{17})\s+(.+)$/);
+    if (match && !seen.has(match[1])) {
+      seen.add(match[1]);
+      discovered.push({
+        mac:    match[1],
+        name:   match[2].trim(),
+        paired: pairedMacs.has(match[1]),
+      });
+    }
+  }
+
+  return discovered;
 }
 
 export async function connectDevice(mac: string): Promise<void> {
@@ -58,10 +88,15 @@ export async function disconnectDevice(mac: string): Promise<void> {
   await btctl(`disconnect ${mac}`);
 }
 
-export async function trustDevice(mac: string): Promise<void> {
+/**
+ * Pair and trust a new device so it auto-reconnects in the future.
+ * Pairing must complete before trusting — bluetoothctl handles the PIN exchange.
+ */
+export async function pairDevice(mac: string): Promise<void> {
+  await btctl(`pair ${mac}`);
   await btctl(`trust ${mac}`);
 }
 
-export async function pairDevice(mac: string): Promise<void> {
-  await btctl(`pair ${mac}`);
+export async function trustDevice(mac: string): Promise<void> {
+  await btctl(`trust ${mac}`);
 }
