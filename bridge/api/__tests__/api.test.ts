@@ -1,6 +1,6 @@
 /**
  * Bridge API integration tests.
- * All system commands (playerctl, bluetoothctl, librespot) are mocked
+ * All system commands (playerctl, bluetoothctl, librespot, party) are mocked
  * so these run on any machine without real hardware.
  */
 
@@ -33,6 +33,10 @@ jest.mock('../src/bluetooth', () => ({
   disconnectDevice: jest.fn().mockResolvedValue(undefined),
   trustDevice:      jest.fn().mockResolvedValue(undefined),
   pairDevice:       jest.fn().mockResolvedValue(undefined),
+  scanDevices:      jest.fn().mockResolvedValue([
+    { mac: 'AA:BB:CC:DD:EE:01', name: 'Living Room Speaker', paired: true },
+    { mac: 'AA:BB:CC:DD:EE:03', name: 'Patio Speaker',       paired: false },
+  ]),
 }));
 
 // ── Mock librespot ────────────────────────────────────────────────────────────
@@ -44,10 +48,22 @@ jest.mock('../src/librespot', () => ({
   })),
 }));
 
+// ── Mock party ────────────────────────────────────────────────────────────────
+jest.mock('../src/party', () => ({
+  enablePartyMode:   jest.fn().mockResolvedValue(undefined),
+  disablePartyMode:  jest.fn().mockResolvedValue(undefined),
+  addSpeakerToParty: jest.fn().mockResolvedValue(undefined),
+  setSpeakerVolume:  jest.fn().mockResolvedValue(undefined),
+  setSpeakerMuted:   jest.fn().mockResolvedValue(undefined),
+  setGroupVolume:    jest.fn().mockResolvedValue(undefined),
+  getPartyStatus:    jest.fn().mockReturnValue({ active: false, speakers: [] }),
+}));
+
 // Import AFTER mocks are set up
 import app from '../src/index';
 import * as playerctl from '../src/playerctl';
 import * as bluetooth from '../src/bluetooth';
+import * as party from '../src/party';
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +76,7 @@ describe('GET /api/status', () => {
     expect(res.body).toHaveProperty('playing');
     expect(res.body).toHaveProperty('track');
     expect(res.body).toHaveProperty('volume');
+    expect(res.body).toHaveProperty('party');
   });
 
   it('track has required fields', async () => {
@@ -109,7 +126,7 @@ describe('POST /api/previous', () => {
 });
 
 describe('POST /api/seek', () => {
-  it('calls playerctl.seek with position_ms / 1000', async () => {
+  it('calls playerctl.seek with position_ms', async () => {
     const res = await request(app).post('/api/seek').send({ position_ms: 30000 });
     expect(res.status).toBe(200);
     expect(res.body.status.track.position_ms).toBe(30000);
@@ -193,6 +210,14 @@ describe('POST /api/bt/connect', () => {
     expect(bluetooth.connectDevice).toHaveBeenCalledWith('AA:BB:CC:DD:EE:02');
   });
 
+  it('auto-adds speaker to party when party is active', async () => {
+    (party.getPartyStatus as jest.Mock).mockReturnValueOnce({
+      active: true, speakers: [{ mac: 'AA:BB:CC:DD:EE:01', volume: 80, muted: false }],
+    });
+    await request(app).post('/api/bt/connect').send({ mac: 'AA:BB:CC:DD:EE:02' });
+    expect(party.addSpeakerToParty).toHaveBeenCalledWith('AA:BB:CC:DD:EE:02');
+  });
+
   it('returns 400 when mac is missing', async () => {
     const res = await request(app).post('/api/bt/connect').send({});
     expect(res.status).toBe(400);
@@ -210,6 +235,31 @@ describe('POST /api/bt/disconnect', () => {
 
   it('returns 400 when mac is missing', async () => {
     const res = await request(app).post('/api/bt/disconnect').send({});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/bt/scan', () => {
+  it('returns discovered devices including unpaired ones', async () => {
+    const res = await request(app).post('/api/bt/scan');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.devices)).toBe(true);
+    expect(res.body.devices).toHaveLength(2);
+    const unpaired = res.body.devices.find((d: { paired: boolean }) => !d.paired);
+    expect(unpaired).toBeDefined();
+    expect(unpaired.name).toBe('Patio Speaker');
+  });
+});
+
+describe('POST /api/bt/pair', () => {
+  it('calls bluetooth.pairDevice with the given mac', async () => {
+    const res = await request(app).post('/api/bt/pair').send({ mac: 'AA:BB:CC:DD:EE:03' });
+    expect(res.status).toBe(200);
+    expect(bluetooth.pairDevice).toHaveBeenCalledWith('AA:BB:CC:DD:EE:03');
+  });
+
+  it('returns 400 when mac is missing', async () => {
+    const res = await request(app).post('/api/bt/pair').send({});
     expect(res.status).toBe(400);
   });
 });
@@ -232,5 +282,96 @@ describe('POST /internal/event', () => {
     await request(app).post('/internal/event').send({ event: 'paused' });
     const res = await request(app).get('/api/status');
     expect(res.body.playing).toBe(false);
+  });
+});
+
+// ── Party mode ────────────────────────────────────────────────────────────────
+
+describe('GET /api/party', () => {
+  it('returns party status', async () => {
+    const res = await request(app).get('/api/party');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('active');
+    expect(Array.isArray(res.body.speakers)).toBe(true);
+  });
+});
+
+describe('POST /api/party/enable', () => {
+  it('calls party.enablePartyMode with the given macs', async () => {
+    (party.getPartyStatus as jest.Mock).mockReturnValueOnce({
+      active: true,
+      speakers: [
+        { mac: 'AA:BB:CC:DD:EE:01', volume: 80, muted: false },
+        { mac: 'AA:BB:CC:DD:EE:02', volume: 80, muted: false },
+      ],
+    });
+    const res = await request(app)
+      .post('/api/party/enable')
+      .send({ macs: ['AA:BB:CC:DD:EE:01', 'AA:BB:CC:DD:EE:02'] });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.party.active).toBe(true);
+    expect(party.enablePartyMode).toHaveBeenCalledWith([
+      'AA:BB:CC:DD:EE:01', 'AA:BB:CC:DD:EE:02',
+    ]);
+  });
+
+  it('returns 400 when macs is missing', async () => {
+    expect((await request(app).post('/api/party/enable').send({})).status).toBe(400);
+  });
+
+  it('returns 400 when macs is empty array', async () => {
+    expect((await request(app).post('/api/party/enable').send({ macs: [] })).status).toBe(400);
+  });
+});
+
+describe('POST /api/party/disable', () => {
+  it('calls party.disablePartyMode and returns active=false', async () => {
+    const res = await request(app).post('/api/party/disable');
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.party.active).toBe(false);
+    expect(party.disablePartyMode).toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/party/speaker/volume', () => {
+  it('calls party.setSpeakerVolume', async () => {
+    const res = await request(app)
+      .post('/api/party/speaker/volume')
+      .send({ mac: 'AA:BB:CC:DD:EE:01', volume: 65 });
+    expect(res.status).toBe(200);
+    expect(party.setSpeakerVolume).toHaveBeenCalledWith('AA:BB:CC:DD:EE:01', 65);
+  });
+
+  it('returns 400 when mac or volume is missing', async () => {
+    expect((await request(app).post('/api/party/speaker/volume').send({ mac: 'XX' })).status).toBe(400);
+    expect((await request(app).post('/api/party/speaker/volume').send({ volume: 50 })).status).toBe(400);
+  });
+});
+
+describe('POST /api/party/speaker/mute', () => {
+  it('calls party.setSpeakerMuted with muted=true', async () => {
+    const res = await request(app)
+      .post('/api/party/speaker/mute')
+      .send({ mac: 'AA:BB:CC:DD:EE:01', muted: true });
+    expect(res.status).toBe(200);
+    expect(party.setSpeakerMuted).toHaveBeenCalledWith('AA:BB:CC:DD:EE:01', true);
+  });
+
+  it('returns 400 when mac or muted is missing', async () => {
+    expect((await request(app).post('/api/party/speaker/mute').send({ mac: 'XX' })).status).toBe(400);
+  });
+});
+
+describe('POST /api/party/volume', () => {
+  it('calls party.setGroupVolume', async () => {
+    const res = await request(app).post('/api/party/volume').send({ volume: 70 });
+    expect(res.status).toBe(200);
+    expect(party.setGroupVolume).toHaveBeenCalledWith(70);
+  });
+
+  it('returns 400 when volume is missing', async () => {
+    expect((await request(app).post('/api/party/volume').send({})).status).toBe(400);
   });
 });

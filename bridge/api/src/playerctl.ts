@@ -13,6 +13,9 @@ import type { Track } from './types';
 const execAsync = promisify(exec);
 const PLAYER = 'librespot';
 
+const xdgRuntime = process.env.XDG_RUNTIME_DIR ?? '/run/user/1000';
+const PULSE_ENV = { ...process.env, PULSE_SERVER: `unix:${xdgRuntime}/pulse/native` };
+
 async function run(cmd: string): Promise<string> {
   try {
     const { stdout } = await execAsync(`playerctl --player=${PLAYER} ${cmd}`);
@@ -46,8 +49,13 @@ export async function seek(positionMs: number): Promise<void> {
 
 /** volume — 0 to 100 */
 export async function setVolume(volume: number): Promise<void> {
-  // playerctl volume takes a 0–1 float
-  await run(`volume ${(volume / 100).toFixed(2)}`);
+  // Use PulseAudio directly — librespot doesn't expose MPRIS2 volume
+  try {
+    await execAsync(`pactl set-sink-volume @DEFAULT_SINK@ ${Math.round(volume)}%`, { env: PULSE_ENV });
+  } catch {
+    // fallback: try playerctl
+    await run(`volume ${(volume / 100).toFixed(2)}`);
+  }
 }
 
 export async function isPlaying(): Promise<boolean> {
@@ -57,16 +65,24 @@ export async function isPlaying(): Promise<boolean> {
 
 /** Returns current volume as 0–100 integer */
 export async function getVolume(): Promise<number> {
+  try {
+    const { stdout } = await execAsync('pactl get-sink-volume @DEFAULT_SINK@', { env: PULSE_ENV });
+    const match = stdout.match(/(\d+)%/);
+    if (match) return parseInt(match[1], 10);
+  } catch { /* fall through */ }
   const raw = await run('volume');
   const f = parseFloat(raw);
-  return isNaN(f) ? 0 : Math.round(f * 100);
+  return isNaN(f) ? 50 : Math.round(f * 100);
 }
 
-/** Returns current playback position in milliseconds */
+/** Returns current playback position in milliseconds.
+ *  Throws if playerctl cannot reach the player (e.g. no MPRIS2),
+ *  so the caller's catch block can use an increment fallback instead. */
 export async function getPosition(): Promise<number> {
   const raw = await run('position');
   const secs = parseFloat(raw);
-  return isNaN(secs) ? 0 : Math.round(secs * 1000);
+  if (isNaN(secs)) throw new Error('playerctl position unavailable');
+  return Math.round(secs * 1000);
 }
 
 /** Reads full track metadata from MPRIS */

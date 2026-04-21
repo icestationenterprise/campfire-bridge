@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useBridge } from '../context/BridgeContext';
+import { useSpotify } from '../context/SpotifyContext';
+import { useSettings } from '../context/SettingsContext';
 import { formatTime } from '../utils/helpers';
 
 /**
@@ -10,7 +12,9 @@ import { formatTime } from '../utils/helpers';
  * Reads from and writes to BridgeContext — no props needed.
  */
 export default function Player() {
-  const { status, isReachable, play, pause, next, prev, seek, setVolume } = useBridge();
+  const { status, isReachable, setVolume, seek: syncPosition } = useBridge();
+  const { play, pause, next, previous, seek } = useSpotify();
+  const { controllerDisabled } = useSettings();
   const [seeking, setSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
 
@@ -40,59 +44,69 @@ export default function Player() {
     <View style={styles.root}>
       {/* Track info */}
       <View style={styles.trackInfo}>
-        <View style={styles.albumArt}>
-          <Icon name="music-note" size={48} color="#fff" />
-        </View>
+        {track.art_url ? (
+          <Image source={{ uri: track.art_url }} style={styles.albumArt} />
+        ) : (
+          <View style={styles.albumArt}>
+            <Icon name="music-note" size={48} color="#fff" />
+          </View>
+        )}
         <Text style={styles.title} numberOfLines={1}>{track.title || '—'}</Text>
         <Text style={styles.artist} numberOfLines={1}>{track.artist || '—'}</Text>
       </View>
 
-      {/* Seek bar */}
-      <View style={styles.seekRow}>
-        <Text style={styles.timeLabel}>{formatTime(position)}</Text>
-        <Slider
-          style={styles.seekSlider}
-          minimumValue={0}
-          maximumValue={duration}
-          value={position}
-          minimumTrackTintColor="#1db954"
-          maximumTrackTintColor="#555"
-          thumbTintColor="#1db954"
-          onValueChange={(v) => { setSeeking(true); setSeekValue(v as number); }}
-          onSlidingComplete={(v) => {
-            setSeeking(false);
-            seek(Math.round(v as number));
-          }}
-        />
-        <Text style={styles.timeLabel}>{formatTime(duration)}</Text>
-      </View>
+      {/* Seek bar — hidden when controller is disabled */}
+      {!controllerDisabled && (
+        <View style={styles.seekRow}>
+          <Text style={styles.timeLabel}>{formatTime(position)}</Text>
+          <Slider
+            style={styles.seekSlider}
+            minimumValue={0}
+            maximumValue={duration}
+            value={position}
+            minimumTrackTintColor="#1db954"
+            maximumTrackTintColor="#555"
+            thumbTintColor="#1db954"
+            onValueChange={(v) => { setSeeking(true); setSeekValue(v as number); }}
+            onSlidingComplete={(v) => {
+              const pos = Math.round(v as number);
+              setSeeking(false);
+              seek(pos);         // moves Spotify playback
+              syncPosition(pos); // keeps bridge position counter in sync
+            }}
+          />
+          <Text style={styles.timeLabel}>{formatTime(duration)}</Text>
+        </View>
+      )}
 
-      {/* Transport controls */}
-      <View style={styles.controls}>
-        <Pressable
-          onPress={prev}
-          style={({ pressed }) => [styles.controlBtn, pressed && styles.pressed]}
-          accessibilityLabel="Previous track"
-        >
-          <Icon name="skip-previous" size={40} color="#fff" />
-        </Pressable>
+      {/* Transport controls — hidden when controller is disabled */}
+      {!controllerDisabled && (
+        <View style={styles.controls}>
+          <Pressable
+            onPress={previous}
+            style={({ pressed }) => [styles.controlBtn, pressed && styles.pressed]}
+            accessibilityLabel="Previous track"
+          >
+            <Icon name="skip-previous" size={40} color="#fff" />
+          </Pressable>
 
-        <Pressable
-          onPress={playing ? pause : play}
-          style={({ pressed }) => [styles.playBtn, pressed && styles.pressed]}
-          accessibilityLabel={playing ? 'Pause' : 'Play'}
-        >
-          <Icon name={playing ? 'pause' : 'play-arrow'} size={48} color="#fff" />
-        </Pressable>
+          <Pressable
+            onPress={playing ? pause : play}
+            style={({ pressed }) => [styles.playBtn, pressed && styles.pressed]}
+            accessibilityLabel={playing ? 'Pause' : 'Play'}
+          >
+            <Icon name={playing ? 'pause' : 'play-arrow'} size={48} color="#fff" />
+          </Pressable>
 
-        <Pressable
-          onPress={next}
-          style={({ pressed }) => [styles.controlBtn, pressed && styles.pressed]}
-          accessibilityLabel="Next track"
-        >
-          <Icon name="skip-next" size={40} color="#fff" />
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={next}
+            style={({ pressed }) => [styles.controlBtn, pressed && styles.pressed]}
+            accessibilityLabel="Next track"
+          >
+            <Icon name="skip-next" size={40} color="#fff" />
+          </Pressable>
+        </View>
+      )}
 
       {/* Volume */}
       <View style={styles.volumeRow}>

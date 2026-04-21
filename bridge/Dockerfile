@@ -6,7 +6,7 @@
 #   docker run -p 3000:3000 campfire-bridge
 #
 # The container runs the bridge API with stub versions of librespot,
-# playerctl, and bluetoothctl so you can test the full app without
+# playerctl, bluetoothctl, and pactl so you can test the full app without
 # real hardware.
 
 FROM debian:bookworm-slim
@@ -27,7 +27,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Stub binaries (replace real tools with scripts that return fake data) ─────
-# These let the bridge run and respond correctly without real hardware.
 # Remove these stubs when deploying to a real Pi.
 
 # librespot stub — pretends to start
@@ -46,14 +45,43 @@ RUN printf '#!/bin/bash\ncase "$*" in\n\
   *)           exit 0 ;;\n\
 esac\n' > /usr/local/bin/playerctl && chmod +x /usr/local/bin/playerctl
 
-# bluetoothctl stub — returns a fake paired speaker
-RUN printf '#!/bin/bash\ncase "$*" in\n\
-  *paired-devices*) echo "Device AA:BB:CC:DD:EE:FF Test Speaker" ;;\n\
-  *info*)           echo "  Connected: yes" ;;\n\
-  *connect*)        echo "Connection successful" ;;\n\
-  *disconnect*)     echo "Successful disconnected" ;;\n\
-  *)                exit 0 ;;\n\
+# bluetoothctl stub — returns two paired speakers and a third undiscovered one
+# Handles: paired-devices, devices (scan results), info, connect, disconnect,
+#          pair, trust, and the --timeout scan flag.
+RUN printf '#!/bin/bash\n\
+case "$*" in\n\
+  *paired-devices*)\n\
+    printf "Device AA:BB:CC:DD:EE:01 Living Room Speaker\\nDevice AA:BB:CC:DD:EE:02 Bedroom Speaker\\n" ;;\n\
+  *info*)\n\
+    echo "  Connected: yes" ;;\n\
+  *connect*)\n\
+    echo "Connection successful" ;;\n\
+  *disconnect*)\n\
+    echo "Successful disconnected" ;;\n\
+  *pair*)\n\
+    echo "Pairing successful" ;;\n\
+  *trust*)\n\
+    echo "Changing trust succeeded" ;;\n\
+  *scan*|*devices*)\n\
+    printf "Device AA:BB:CC:DD:EE:01 Living Room Speaker\\nDevice AA:BB:CC:DD:EE:02 Bedroom Speaker\\nDevice AA:BB:CC:DD:EE:03 Patio Speaker\\n" ;;\n\
+  *)\n\
+    exit 0 ;;\n\
 esac\n' > /usr/local/bin/bluetoothctl && chmod +x /usr/local/bin/bluetoothctl
+
+# pactl stub — simulates PulseAudio combined sink management
+RUN printf '#!/bin/bash\n\
+case "$*" in\n\
+  load-module*)      echo "42" ;;\n\
+  unload-module*)    exit 0 ;;\n\
+  set-default-sink*) exit 0 ;;\n\
+  set-sink-volume*)  exit 0 ;;\n\
+  set-sink-mute*)    exit 0 ;;\n\
+  "list short sinks")\n\
+    printf "0\tbluez_sink.AA_BB_CC_DD_EE_01.a2dp_sink\tMODULE\tRUNNING\\n"\n\
+    printf "1\tbluez_sink.AA_BB_CC_DD_EE_02.a2dp_sink\tMODULE\tIDLE\\n" ;;\n\
+  *)\n\
+    exit 0 ;;\n\
+esac\n' > /usr/local/bin/pactl && chmod +x /usr/local/bin/pactl
 
 # ── App ───────────────────────────────────────────────────────────────────────
 WORKDIR /app

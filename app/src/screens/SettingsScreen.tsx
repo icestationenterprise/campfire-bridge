@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   Pressable,
+  Switch,
   StyleSheet,
   SafeAreaView,
   ScrollView,
@@ -16,7 +17,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useSpotify } from '../context/SpotifyContext';
 
 export default function SettingsScreen() {
-  const { bridgeUrl, spotifyClientId, mode, setSetting } = useSettings();
+  const { bridgeUrl, spotifyClientId, mode, controllerDisabled, setSetting } = useSettings();
   const { isAuthenticated, login, logout }               = useSpotify();
 
   const [urlDraft,      setUrlDraft]      = useState(bridgeUrl);
@@ -24,10 +25,8 @@ export default function SettingsScreen() {
   const [saved,         setSaved]         = useState(false);
 
   const handleSave = async () => {
-    await Promise.all([
-      setSetting('bridgeUrl',       urlDraft.trim()),
-      setSetting('spotifyClientId', clientIdDraft.trim()),
-    ]);
+    await setSetting('bridgeUrl',       urlDraft.trim());
+    await setSetting('spotifyClientId', clientIdDraft.trim());
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -141,6 +140,25 @@ export default function SettingsScreen() {
             )}
           </View>
 
+          {/* ── Player ───────────────────────────────────────────── */}
+          <Text style={styles.sectionHeader}>Player</Text>
+          <View style={styles.card}>
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLabel}>
+                <Text style={styles.label}>Disable Controller</Text>
+                <Text style={styles.hint}>
+                  Hide Campfire's transport controls and use the Spotify app instead.
+                </Text>
+              </View>
+              <Switch
+                value={controllerDisabled}
+                onValueChange={(v) => setSetting('controllerDisabled', v)}
+                trackColor={{ false: '#333', true: '#1db954' }}
+                thumbColor="#fff"
+              />
+            </View>
+          </View>
+
           {/* ── Save ─────────────────────────────────────────────── */}
           <Pressable
             style={[styles.btn, styles.btnPrimary, saved && styles.btnSaved]}
@@ -251,4 +269,14 @@ const styles = StyleSheet.create({
   btnSaved:    { backgroundColor: '#1db954' },
   btnSpotify:  { backgroundColor: '#1db954' },
   btnDanger:   { backgroundColor: '#c0392b' },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  toggleLabel: {
+    flex: 1,
+    gap: 4,
+  },
 });

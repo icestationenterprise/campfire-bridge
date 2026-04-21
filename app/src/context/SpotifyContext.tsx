@@ -57,6 +57,16 @@ type SpotifyContextType = {
   transferPlayback: (deviceId: string, play?: boolean) => Promise<void>;
   /** Play a specific track by URI */
   playTrack: (uri: string, deviceId?: string) => Promise<void>;
+  /** Resume playback on the active device */
+  play: () => Promise<void>;
+  /** Pause playback on the active device */
+  pause: () => Promise<void>;
+  /** Skip to next track */
+  next: () => Promise<void>;
+  /** Skip to previous track */
+  previous: () => Promise<void>;
+  /** Seek to position in current track */
+  seek: (position_ms: number) => Promise<void>;
 };
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -271,6 +281,31 @@ export function SpotifyProvider({
     [spotifyFetch],
   );
 
+  const play = useCallback(async (): Promise<void> => {
+    const res = await spotifyFetch('/me/player/play', { method: 'PUT' });
+    if (!res.ok && res.status !== 204) throw new Error(`play failed: ${res.status}`);
+  }, [spotifyFetch]);
+
+  const pause = useCallback(async (): Promise<void> => {
+    const res = await spotifyFetch('/me/player/pause', { method: 'PUT' });
+    if (!res.ok && res.status !== 204) throw new Error(`pause failed: ${res.status}`);
+  }, [spotifyFetch]);
+
+  const next = useCallback(async (): Promise<void> => {
+    const res = await spotifyFetch('/me/player/next', { method: 'POST' });
+    if (!res.ok && res.status !== 204) throw new Error(`next failed: ${res.status}`);
+  }, [spotifyFetch]);
+
+  const previous = useCallback(async (): Promise<void> => {
+    const res = await spotifyFetch('/me/player/previous', { method: 'POST' });
+    if (!res.ok && res.status !== 204) throw new Error(`previous failed: ${res.status}`);
+  }, [spotifyFetch]);
+
+  const seek = useCallback(async (position_ms: number): Promise<void> => {
+    const res = await spotifyFetch(`/me/player/seek?position_ms=${Math.round(position_ms)}`, { method: 'PUT' });
+    if (!res.ok && res.status !== 204) throw new Error(`seek failed: ${res.status}`);
+  }, [spotifyFetch]);
+
   const value = useMemo<SpotifyContextType>(
     () => ({
       isAuthenticated: !!accessToken,
@@ -281,8 +316,13 @@ export function SpotifyProvider({
       getDevices,
       transferPlayback,
       playTrack,
+      play,
+      pause,
+      next,
+      previous,
+      seek,
     }),
-    [accessToken, login, logout, search, getDevices, transferPlayback, playTrack],
+    [accessToken, login, logout, search, getDevices, transferPlayback, playTrack, play, pause, next, previous, seek],
   );
 
   return <SpotifyContext.Provider value={value}>{children}</SpotifyContext.Provider>;

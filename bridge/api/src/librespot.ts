@@ -10,10 +10,24 @@
  * stays in sync without polling.
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { writeFileSync, chmodSync } from 'fs';
 import path from 'path';
+
+/** Returns the IPv4 address of wlan0 (or eth0 as fallback), or undefined if not found. */
+function getWlanIp(): string | undefined {
+  for (const iface of ['wlan0', 'eth0']) {
+    try {
+      const out = execSync(`ip -4 addr show ${iface} 2>/dev/null`, { encoding: 'utf8' });
+      const m = out.match(/inet\s+(\d+\.\d+\.\d+\.\d+)/);
+      if (m) return m[1];
+    } catch {
+      // interface not found, try next
+    }
+  }
+  return undefined;
+}
 
 // Path to the shell script librespot calls on each event
 const EVENT_HOOK_PATH = path.join(__dirname, '..', 'event-hook.sh');
@@ -26,9 +40,9 @@ curl -s -X POST http://127.0.0.1:${port}/internal/event \\
   -H 'Content-Type: application/json' \\
   -d "{
     \\"event\\": \\"$PLAYER_EVENT\\",
-    \\"name\\": \\"$NAME\\",
-    \\"artists\\": \\"$ARTISTS\\",
-    \\"duration_ms\\": \\"$DURATION_MS\\",
+    \\"name\\": \\"\${TRACK_TITLE:-$NAME}\\",
+    \\"artists\\": \\"\${TRACK_ARTIST:-$ARTISTS}\\",
+    \\"duration_ms\\": \\"\${TRACK_DURATION_MS:-$DURATION_MS}\\",
     \\"position_ms\\": \\"$POSITION_MS\\",
     \\"track_id\\": \\"$TRACK_ID\\"
   }" || true
@@ -57,18 +71,35 @@ export class LibrespotManager extends EventEmitter {
       this.restartTimer = null;
     }
 
-    this.proc = spawn(
-      'librespot',
-      [
-        '--name',    this.deviceName,
-        '--backend', 'pulseaudio',
-        '--onevent', EVENT_HOOK_PATH,
-        '--bitrate', '320',
-        '--enable-volume-normalisation',
-        '--initial-volume', '50',
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
+    const args = [
+      '--name',          this.deviceName,
+      '--backend',       'pulseaudio',
+      '--onevent',       EVENT_HOOK_PATH,
+      '--bitrate',       '320',
+      '--enable-volume-normalisation',
+      '--initial-volume', '50',
+      '--system-cache',  '/home/pi/.cache/librespot',
+    ];
+
+    const wlanIp = getWlanIp();
+    if (wlanIp) {
+      args.push('--zeroconf-interface', wlanIp);
+      console.log(`[librespot] binding zeroconf to ${wlanIp}`);
+    }
+
+    // avahi-daemon runs on Pi OS and owns port 5353, so librespot's built-in
+    // zeroconf can't advertise reliably. Delegate to avahi instead.
+    args.push('--zeroconf-backend', 'avahi');
+
+    // librespot needs PULSE_SERVER to find the per-user PulseAudio socket.
+    // The systemd user service sets XDG_RUNTIME_DIR; fall back to uid 1000.
+    const xdgRuntime = process.env.XDG_RUNTIME_DIR ?? '/run/user/1000';
+    const pulseEnv = {
+      ...process.env,
+      PULSE_SERVER: `unix:${xdgRuntime}/pulse/native`,
+    };
+
+    this.proc = spawn('librespot', args, { stdio: ['ignore', 'pipe', 'pipe'], env: pulseEnv });
 
     this.proc.stdout?.on('data', (d: Buffer) =>
       console.log('[librespot]', d.toString().trim()),
