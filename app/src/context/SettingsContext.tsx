@@ -14,23 +14,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type AppMode = 'online' | 'offline';
 
 export type Settings = {
-  /** Base URL of the Raspberry Pi bridge API, e.g. http://192.168.1.42:8080 */
-  bridgeUrl: string;
-  /** Spotify OAuth client ID registered at developer.spotify.com */
+  /** URL used in Online mode (Tailscale IP) */
+  onlineUrl: string;
+  /** URL used in Offline mode (Campfire hotspot) */
+  offlineUrl: string;
+  /** Spotify OAuth client ID */
   spotifyClientId: string;
-  /**
-   * online — Spotify Connect via Pi bridge (requires internet)
-   * offline — Party mode: Pi syncs audio across BT speakers, no internet needed
-   */
+  /** online = Spotify Connect via Pi; offline = AirPlay via Pi hotspot */
   mode: AppMode;
-  /**
-   * When true, hides Campfire's transport controls and seek bar so the user
-   * controls playback from the Spotify app instead.
-   */
+  /** Hide Campfire transport controls, use Spotify app instead */
   controllerDisabled: boolean;
 };
 
 type SettingsContextType = Settings & {
+  /** Computed: the active bridge URL for the current mode */
+  bridgeUrl: string;
   setSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>;
   isLoaded: boolean;
 };
@@ -38,9 +36,10 @@ type SettingsContextType = Settings & {
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
 const DEFAULTS: Settings = {
-  bridgeUrl: 'http://localhost:3000',
-  spotifyClientId: '',
-  mode: 'online',
+  onlineUrl:          'http://100.102.229.11:3000',
+  offlineUrl:         'http://192.168.4.1:3000',
+  spotifyClientId:    '',
+  mode:               'online',
   controllerDisabled: false,
 };
 
@@ -55,18 +54,21 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const settingsRef = useRef(settings);
 
-  // Load persisted settings on mount
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then(raw => {
         if (raw) {
-          const parsed = JSON.parse(raw) as Partial<Settings>;
+          const parsed = JSON.parse(raw) as Partial<Settings> & { bridgeUrl?: string };
+          // Migrate old single bridgeUrl → onlineUrl
+          if (parsed.bridgeUrl && !parsed.onlineUrl) {
+            parsed.onlineUrl = parsed.bridgeUrl;
+          }
           const merged = { ...DEFAULTS, ...parsed };
           settingsRef.current = merged;
           setSettings(merged);
         }
       })
-      .catch(() => {/* use defaults on read error */})
+      .catch(() => {})
       .finally(() => setIsLoaded(true));
   }, []);
 
@@ -81,7 +83,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo<SettingsContextType>(
-    () => ({ ...settings, setSetting, isLoaded }),
+    () => ({
+      ...settings,
+      bridgeUrl: settings.mode === 'online' ? settings.onlineUrl : settings.offlineUrl,
+      setSetting,
+      isLoaded,
+    }),
     [settings, setSetting, isLoaded],
   );
 
