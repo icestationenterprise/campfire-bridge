@@ -141,6 +141,7 @@ export default function DevicesScreen() {
   const [partyLoading,   setPartyLoading]   = useState(false);
   const [offlineLoading, setOfflineLoading] = useState(false);
   const [refreshing,     setRefreshing]     = useState(false);
+  const [btError,        setBtError]        = useState<string | null>(null);
 
   // Group slider local state
   const [groupVol, setGroupVol] = useState(80);
@@ -185,18 +186,39 @@ export default function DevicesScreen() {
   }, [status, connect, disconnect]);
 
   const handleBtConnect = useCallback(async (mac: string) => {
+    setBtError(null);
     setLoadingMac(mac);
-    try { await connectBtDevice(mac); } finally { setLoadingMac(null); }
+    try {
+      await connectBtDevice(mac);
+    } catch (e) {
+      setBtError((e as Error).message);
+    } finally {
+      setLoadingMac(null);
+    }
   }, [connectBtDevice]);
 
   const handleBtDisconnect = useCallback(async (device: BluetoothDevice) => {
+    setBtError(null);
     setLoadingMac(device.mac);
-    try { await disconnectBtDevice(device.mac); } finally { setLoadingMac(null); }
+    try {
+      await disconnectBtDevice(device.mac);
+    } catch (e) {
+      setBtError((e as Error).message);
+    } finally {
+      setLoadingMac(null);
+    }
   }, [disconnectBtDevice]);
 
   const handlePair = useCallback(async (mac: string) => {
+    setBtError(null);
     setPairingMac(mac);
-    try { await pairBtDevice(mac); } finally { setPairingMac(null); }
+    try {
+      await pairBtDevice(mac);
+    } catch (e) {
+      setBtError((e as Error).message);
+    } finally {
+      setPairingMac(null);
+    }
   }, [pairBtDevice]);
 
   const handleStartParty = useCallback(async () => {
@@ -258,6 +280,13 @@ export default function DevicesScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#1db954" />
         }
       >
+        {/* ── BT error banner ─────────────────────────────────────────────── */}
+        {btError && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>{btError}</Text>
+          </View>
+        )}
+
         {/* ── Bridge card ─────────────────────────────────────────────────── */}
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>Bridge</Text>
@@ -612,6 +641,15 @@ export default function DevicesScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#121212' },
+
+  errorBanner: {
+    backgroundColor: '#5c1a1a',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 8,
+    padding: 12,
+  },
+  errorBannerText: { color: '#ff6b6b', fontSize: 13 },
 
   section: { paddingHorizontal: 16, paddingTop: 20 },
 

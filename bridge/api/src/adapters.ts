@@ -231,6 +231,46 @@ async function findAdapterForPairedDevice(deviceMac: string): Promise<string | n
 }
 
 /**
+ * Attempt a BT connect scoped to one adapter.
+ * Does NOT send 'quit' — bluetoothctl must stay alive to receive the async
+ * "Connection successful" notification from BlueZ. Kills the process once
+ * a terminal result (success or failure) or the timeout is reached.
+ */
+function attemptConnect(adapterMac: string | null, deviceMac: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const proc = spawn('bluetoothctl', [], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '';
+    let settled = false;
+
+    const done = (success: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      proc.kill('SIGTERM');
+      resolve(success);
+    };
+
+    const timer = setTimeout(() => done(false), 12_000);
+
+    proc.stdout?.on('data', (d: Buffer) => {
+      out += d.toString();
+      if (out.includes('Connection successful') || out.includes('already connected')) done(true);
+      else if (out.includes('Failed to connect') || out.includes('not available')) done(false);
+    });
+    proc.on('close', () => { if (!settled) resolve(out.includes('Connection successful')); });
+    proc.on('error', () => done(false));
+
+    setTimeout(() => {
+      const cmd = adapterMac
+        ? `select ${adapterMac}\nconnect ${deviceMac}\n`
+        : `connect ${deviceMac}\n`;
+      proc.stdin?.write(cmd);
+      // Do NOT end stdin or send quit — connection result arrives asynchronously
+    }, 300);
+  });
+}
+
+/**
  * Connect a Bluetooth speaker via its assigned adapter.
  * First checks which adapter has the device paired (reliable), then falls
  * back to load-balanced assignment if not found.
@@ -247,8 +287,9 @@ export async function connectDevice(deviceMac: string): Promise<void> {
   }
 
   const hci = assignments.get(deviceMac)!;
-  const out = await btctlOn(hci, [`connect ${deviceMac}`], 12_000);
-  if (!out.includes('Connection successful') && !out.includes('already connected')) {
+  const adapterMac = await adapterMacForHci(hci);
+  const ok = await attemptConnect(adapterMac, deviceMac);
+  if (!ok) {
     releaseAdapter(deviceMac);
     throw new Error(`Failed to connect ${deviceMac} via ${hci}`);
   }
