@@ -22,6 +22,7 @@ import { promisify } from 'util';
 import * as fs   from 'fs';
 import * as path from 'path';
 import type { SpeakerState, PartyStatus } from './types';
+import * as playerctl from './playerctl';
 
 const execAsync = promisify(exec);
 
@@ -148,7 +149,7 @@ async function loadPartySink(macs: string[]): Promise<void> {
     const delay = calibration[mac] ?? (maxLatency - latencyMs + BASE_MS);
     const loopOut = await pactl(
       `load-module module-loopback ` +
-      `source=campfire_party.monitor sink=${sink} latency_msec=${delay} adjust_time=10`,
+      `source=campfire_party.monitor sink=${sink} latency_msec=${delay} adjust_time=2`,
     );
     const loopId = parseInt(loopOut, 10);
     if (!isNaN(loopId)) loopbackIds.push(loopId);
@@ -160,7 +161,7 @@ async function loadPartySink(macs: string[]): Promise<void> {
 async function applyStates(states: SpeakerState[]): Promise<void> {
   for (const s of states) {
     await pactl(`set-sink-volume ${macToSinkName(s.mac)} ${s.volume}%`);
-    await pactl(`set-sink-mute   ${macToSinkName(s.mac)} ${s.muted ? '1' : '0'}`);
+    await pactl(`set-sink-mute ${macToSinkName(s.mac)} ${s.muted ? '1' : '0'}`);
   }
 }
 
@@ -252,9 +253,10 @@ export async function disablePartyMode(): Promise<void> {
 
 export async function setSpeakerVolume(mac: string, volume: number): Promise<void> {
   const clamped = Math.max(0, Math.min(100, volume));
-  await pactl(`set-sink-volume ${macToSinkName(mac)} ${clamped}%`);
   const s = speakerStates.find(s => s.mac === mac);
-  if (s) s.volume = clamped;
+  if (!s) return;
+  s.volume = clamped;
+  await pactl(`set-sink-volume ${macToSinkName(mac)} ${clamped}%`);
 }
 
 export async function setSpeakerMuted(mac: string, muted: boolean): Promise<void> {
@@ -268,6 +270,23 @@ export async function setGroupVolume(volume: number): Promise<void> {
   for (const s of speakerStates) {
     await pactl(`set-sink-volume ${macToSinkName(s.mac)} ${clamped}%`);
     s.volume = clamped;
+  }
+}
+
+/** Shift the master party volume by delta percentage points.
+ *  Controls campfire_party (the null sink all speakers read from), which is
+ *  the same layer as the music page slider — both use @DEFAULT_SINK@. */
+export async function shiftGroupVolume(delta: number): Promise<void> {
+  const current = await playerctl.getVolume();
+  const next = Math.max(0, Math.min(100, Math.round(current + delta)));
+  await playerctl.setVolume(next);
+}
+
+/** Mute or unmute all speakers simultaneously. */
+export async function setGroupMuted(muted: boolean): Promise<void> {
+  for (const s of speakerStates) {
+    await pactl(`set-sink-mute ${macToSinkName(s.mac)} ${muted ? '1' : '0'}`);
+    s.muted = muted;
   }
 }
 

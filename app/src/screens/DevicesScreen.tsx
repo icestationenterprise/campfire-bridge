@@ -3,6 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -57,9 +58,11 @@ function PartyMemberRow({
         </Pressable>
 
         <View style={styles.partyMemberInfo}>
-          <Text style={[styles.deviceName, speaker.muted && styles.mutedText]}>
-            {device?.name ?? speaker.mac}
-          </Text>
+          <View style={styles.speakerNameRow}>
+            <Text style={[styles.deviceName, speaker.muted && styles.mutedText]}>
+              {device?.name ?? speaker.mac}
+            </Text>
+          </View>
           <Text style={styles.deviceSub}>{speaker.mac}</Text>
         </View>
 
@@ -124,12 +127,14 @@ export default function DevicesScreen() {
     disconnectBtDevice,
     scanBtDevices,
     pairBtDevice,
+    removeBtDevice,
     partyStatus,
     enableParty,
     disableParty,
     setSpeakerVolume,
     setSpeakerMuted,
-    setGroupVolume,
+    shiftGroupVolume,
+    setGroupMuted,
     adjustSpeakerSync,
     offlineActive,
     enableOfflineParty,
@@ -143,15 +148,6 @@ export default function DevicesScreen() {
   const [refreshing,     setRefreshing]     = useState(false);
   const [btError,        setBtError]        = useState<string | null>(null);
 
-  // Group slider local state
-  const [groupVol, setGroupVol] = useState(80);
-  useEffect(() => {
-    if (partyStatus.speakers.length > 0) {
-      const avg = partyStatus.speakers.reduce((s, sp) => s + sp.volume, 0)
-        / partyStatus.speakers.length;
-      setGroupVol(Math.round(avg));
-    }
-  }, [partyStatus.speakers]);
 
   useEffect(() => {
     if (isReachable) fetchBtDevices();
@@ -208,6 +204,31 @@ export default function DevicesScreen() {
       setLoadingMac(null);
     }
   }, [disconnectBtDevice]);
+
+  const handleRemove = useCallback((device: BluetoothDevice) => {
+    Alert.alert(
+      'Remove Speaker',
+      `Remove "${device.name}" from the Pi? You'll need to re-pair it to use it again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setBtError(null);
+            setLoadingMac(device.mac);
+            try {
+              await removeBtDevice(device.mac);
+            } catch (e) {
+              setBtError((e as Error).message);
+            } finally {
+              setLoadingMac(null);
+            }
+          },
+        },
+      ],
+    );
+  }, [removeBtDevice]);
 
   const handlePair = useCallback(async (mac: string) => {
     setBtError(null);
@@ -363,27 +384,27 @@ export default function DevicesScreen() {
                 )}
               </View>
 
-              {/* Group volume slider — shown when party is active */}
-              {partyStatus.active && partyStatus.speakers.length > 0 && (
-                <View style={styles.groupVolumeRow}>
-                  <Icon name="volume-down" size={18} color="#aaa" />
-                  <Slider
-                    style={styles.groupSlider}
-                    minimumValue={0}
-                    maximumValue={100}
-                    step={1}
-                    value={groupVol}
-                    minimumTrackTintColor="#f39c12"
-                    maximumTrackTintColor="#333"
-                    thumbTintColor="#f39c12"
-                    onValueChange={setGroupVol}
-                    onSlidingComplete={setGroupVolume}
-                    accessibilityLabel="Group volume"
-                  />
-                  <Icon name="volume-up" size={18} color="#aaa" />
-                  <Text style={styles.groupVolLabel}>{Math.round(groupVol)}%</Text>
-                </View>
-              )}
+              {/* Group volume controls — shown when party is active */}
+              {partyStatus.active && partyStatus.speakers.length > 0 && (() => {
+                const allMuted = partyStatus.speakers.every(s => s.muted);
+                return (
+                  <View style={styles.groupVolumeRow}>
+                    <Pressable style={styles.shiftBtn} onPress={() => shiftGroupVolume(-10)} accessibilityLabel="Volume down 10%">
+                      <Text style={styles.shiftBtnText}>−</Text>
+                    </Pressable>
+                    <Pressable style={styles.shiftBtn} onPress={() => shiftGroupVolume(10)} accessibilityLabel="Volume up 10%">
+                      <Text style={styles.shiftBtnText}>+</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.shiftBtn, allMuted && styles.shiftBtnMuted]}
+                      onPress={() => setGroupMuted(!allMuted)}
+                      accessibilityLabel={allMuted ? 'Unmute all' : 'Mute all'}
+                    >
+                      <Icon name={allMuted ? 'volume-off' : 'volume-up'} size={16} color={allMuted ? '#e74c3c' : '#f39c12'} />
+                    </Pressable>
+                  </View>
+                );
+              })()}
             </View>
 
             {/* Party member rows (speakers currently in the combined sink) */}
@@ -515,13 +536,23 @@ export default function DevicesScreen() {
                         <Text style={styles.smallBtnText}>Disconnect</Text>
                       </Pressable>
                     ) : (
-                      <Pressable
-                        style={[styles.smallBtn, styles.btnGreen]}
-                        onPress={() => handleBtConnect(device.mac)}
-                        accessibilityLabel={`Connect ${device.name}`}
-                      >
-                        <Text style={styles.smallBtnText}>Connect</Text>
-                      </Pressable>
+                      <View style={styles.btnColumn}>
+                        <Pressable
+                          style={[styles.smallBtn, styles.btnGreen]}
+                          onPress={() => handleBtConnect(device.mac)}
+                          accessibilityLabel={`Connect ${device.name}`}
+                        >
+                          <Text style={styles.smallBtnText}>Connect</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.removeLink}
+                          onPress={() => handleRemove(device)}
+                          accessibilityLabel={`Remove ${device.name}`}
+                        >
+                          <Icon name="delete-outline" size={13} color="#c0392b" />
+                          <Text style={styles.removeLinkText}>Remove</Text>
+                        </Pressable>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -716,6 +747,10 @@ const styles = StyleSheet.create({
   btnOffline:  { backgroundColor: '#5b9cf6' },
   btnDisabled: { backgroundColor: '#444' },
 
+  btnColumn: { alignItems: 'flex-end', gap: 4 },
+  removeLink: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 2 },
+  removeLinkText: { color: '#c0392b', fontSize: 11 },
+
   // ── Party ───────────────────────────────────────────────────────────────────
   partyControlCard: {
     backgroundColor: '#1e1e1e',
@@ -734,10 +769,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 12,
-    gap: 4,
+    gap: 6,
   },
-  groupSlider: { flex: 1 },
-  groupVolLabel: { color: '#aaa', fontSize: 12, minWidth: 36, textAlign: 'right' },
+  groupVolLabel: { color: '#aaa', fontSize: 11, fontWeight: '600', marginRight: 2 },
+  shiftBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#2a2a2a',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  shiftBtnMuted: { borderColor: '#e74c3c', backgroundColor: '#2a1a1a' },
+  shiftBtnText: { color: '#f39c12', fontWeight: '700', fontSize: 18 },
 
   partyMemberCard: {
     backgroundColor: '#1e1e1e',
@@ -805,4 +850,7 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingTop: 48, gap: 12 },
   emptyText:  { color: '#aaa', fontSize: 15 },
   emptyHint:  { color: '#555', fontSize: 13 },
+
+  speakerNameRow: { flexDirection: 'row', alignItems: 'center' },
+
 });

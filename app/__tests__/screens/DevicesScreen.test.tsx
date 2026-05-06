@@ -4,7 +4,12 @@
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import DevicesScreen from '../../src/screens/DevicesScreen';
+
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: () => {},
+}));
 
 jest.mock('react-native-vector-icons/MaterialIcons', () => 'Icon');
 jest.mock('@react-native-community/slider', () => {
@@ -14,25 +19,32 @@ jest.mock('@react-native-community/slider', () => {
     React.createElement(View, { accessibilityLabel });
 });
 
-const mockConnectBt    = jest.fn();
-const mockDisconnectBt = jest.fn();
-const mockFetchBt      = jest.fn();
-const mockConnect      = jest.fn();
-const mockDisconnect   = jest.fn();
-const mockEnableParty  = jest.fn();
-const mockDisableParty = jest.fn();
-const mockSetSpeakerVolume = jest.fn();
-const mockSetSpeakerMuted  = jest.fn();
-const mockSetGroupVolume   = jest.fn();
-const mockScanBt       = jest.fn();
-const mockPairBt       = jest.fn();
+const mockConnectBt         = jest.fn();
+const mockDisconnectBt      = jest.fn();
+const mockFetchBt           = jest.fn();
+const mockConnect           = jest.fn();
+const mockDisconnect        = jest.fn();
+const mockEnableParty       = jest.fn();
+const mockDisableParty      = jest.fn();
+const mockSetSpeakerVolume  = jest.fn();
+const mockSetSpeakerMuted   = jest.fn();
+const mockSetGroupVolume    = jest.fn();
+const mockShiftGroupVolume  = jest.fn();
+const mockSetGroupMuted     = jest.fn();
+const mockScanBt            = jest.fn();
+const mockPairBt            = jest.fn();
+const mockRemoveBt          = jest.fn();
+const mockAdjustSpeakerSync = jest.fn();
+const mockEnableOffline     = jest.fn();
+const mockDisableOffline    = jest.fn();
 
 const baseBridgeContext = {
-  status:      {
+  status: {
     device: 'Test Bridge', connected: true, playing: false,
     track: { title: '', artist: '', position_ms: 0, duration_ms: 0 },
     volume: 60,
     party: { active: false, speakers: [] },
+    offline: false,
   },
   btDevices:         [],
   discoveredDevices: [],
@@ -46,14 +58,21 @@ const baseBridgeContext = {
   disconnectBtDevice: mockDisconnectBt,
   scanBtDevices:     mockScanBt,
   pairBtDevice:      mockPairBt,
+  removeBtDevice:    mockRemoveBt,
   play: jest.fn(), pause: jest.fn(), next: jest.fn(), prev: jest.fn(),
   seek: jest.fn(), setVolume: jest.fn(), refresh: jest.fn(),
-  partyStatus:      { active: false, speakers: [] },
-  enableParty:      mockEnableParty,
-  disableParty:     mockDisableParty,
-  setSpeakerVolume: mockSetSpeakerVolume,
-  setSpeakerMuted:  mockSetSpeakerMuted,
-  setGroupVolume:   mockSetGroupVolume,
+  partyStatus:         { active: false, speakers: [] },
+  enableParty:         mockEnableParty,
+  disableParty:        mockDisableParty,
+  setSpeakerVolume:    mockSetSpeakerVolume,
+  setSpeakerMuted:     mockSetSpeakerMuted,
+  setGroupVolume:      mockSetGroupVolume,
+  shiftGroupVolume:    mockShiftGroupVolume,
+  setGroupMuted:       mockSetGroupMuted,
+  adjustSpeakerSync:   mockAdjustSpeakerSync,
+  offlineActive:       false,
+  enableOfflineParty:  mockEnableOffline,
+  disableOfflineParty: mockDisableOffline,
 };
 
 let mockCtx = { ...baseBridgeContext };
@@ -131,13 +150,14 @@ describe('DevicesScreen', () => {
     expect(screen.getByText('Disconnect')).toBeTruthy();
   });
 
-  it('shows Connect button for disconnected devices', () => {
+  it('shows Connect and Remove buttons for disconnected devices', () => {
     mockCtx = {
       ...baseBridgeContext,
       btDevices: [{ mac: 'AA:BB:CC:DD:EE:02', name: 'Speaker', connected: false }],
     };
     render(<DevicesScreen />);
-    expect(screen.getByText('Connect')).toBeTruthy();
+    expect(screen.getByLabelText('Connect Speaker')).toBeTruthy();
+    expect(screen.getByLabelText('Remove Speaker')).toBeTruthy();
   });
 
   it('calls disconnectBtDevice when tapping Disconnect', async () => {
@@ -160,6 +180,34 @@ describe('DevicesScreen', () => {
     render(<DevicesScreen />);
     fireEvent.press(screen.getByLabelText('Connect Speaker'));
     await waitFor(() => expect(mockConnectBt).toHaveBeenCalledWith('AA:BB:CC:DD:EE:02'));
+  });
+
+  it('shows Alert and calls removeBtDevice when Remove is confirmed', async () => {
+    mockRemoveBt.mockResolvedValue(undefined);
+    mockCtx = {
+      ...baseBridgeContext,
+      btDevices: [{ mac: 'AA:BB:CC:DD:EE:02', name: 'Speaker', connected: false }],
+    };
+    jest.spyOn(Alert, 'alert').mockImplementationOnce((_title, _msg, buttons: any) => {
+      buttons[1].onPress();
+    });
+    render(<DevicesScreen />);
+    fireEvent.press(screen.getByLabelText('Remove Speaker'));
+    await waitFor(() => expect(mockRemoveBt).toHaveBeenCalledWith('AA:BB:CC:DD:EE:02'));
+  });
+
+  it('does not call removeBtDevice when Remove is cancelled', async () => {
+    mockCtx = {
+      ...baseBridgeContext,
+      btDevices: [{ mac: 'AA:BB:CC:DD:EE:02', name: 'Speaker', connected: false }],
+    };
+    jest.spyOn(Alert, 'alert').mockImplementationOnce((_title, _msg, buttons: any) => {
+      buttons[0].onPress?.(); // Cancel
+    });
+    render(<DevicesScreen />);
+    fireEvent.press(screen.getByLabelText('Remove Speaker'));
+    await new Promise(r => setTimeout(r, 50));
+    expect(mockRemoveBt).not.toHaveBeenCalled();
   });
 
   // ── Party mode ────────────────────────────────────────────────────────────
@@ -229,19 +277,64 @@ describe('DevicesScreen', () => {
     await waitFor(() => expect(mockSetSpeakerMuted).toHaveBeenCalledWith('AA:BB:CC:DD:EE:01', true));
   });
 
+  // ── Group volume controls ─────────────────────────────────────────────────
+
+  it('shows group volume buttons when party is active', () => {
+    mockCtx = {
+      ...baseBridgeContext,
+      partyStatus: { active: true, speakers: [{ mac: 'AA:BB:CC:DD:EE:01', volume: 80, muted: false }] },
+    };
+    render(<DevicesScreen />);
+    expect(screen.getByLabelText('Volume down 10%')).toBeTruthy();
+    expect(screen.getByLabelText('Volume up 10%')).toBeTruthy();
+    expect(screen.getByLabelText('Mute all')).toBeTruthy();
+  });
+
+  it('calls shiftGroupVolume(-10) when − is pressed', async () => {
+    mockShiftGroupVolume.mockResolvedValue(undefined);
+    mockCtx = {
+      ...baseBridgeContext,
+      partyStatus: { active: true, speakers: [{ mac: 'AA:BB:CC:DD:EE:01', volume: 80, muted: false }] },
+    };
+    render(<DevicesScreen />);
+    fireEvent.press(screen.getByLabelText('Volume down 10%'));
+    await waitFor(() => expect(mockShiftGroupVolume).toHaveBeenCalledWith(-10));
+  });
+
+  it('calls shiftGroupVolume(10) when + is pressed', async () => {
+    mockShiftGroupVolume.mockResolvedValue(undefined);
+    mockCtx = {
+      ...baseBridgeContext,
+      partyStatus: { active: true, speakers: [{ mac: 'AA:BB:CC:DD:EE:01', volume: 80, muted: false }] },
+    };
+    render(<DevicesScreen />);
+    fireEvent.press(screen.getByLabelText('Volume up 10%'));
+    await waitFor(() => expect(mockShiftGroupVolume).toHaveBeenCalledWith(10));
+  });
+
+  it('calls setGroupMuted(true) when mute button pressed and all are unmuted', async () => {
+    mockSetGroupMuted.mockResolvedValue(undefined);
+    mockCtx = {
+      ...baseBridgeContext,
+      partyStatus: { active: true, speakers: [{ mac: 'AA:BB:CC:DD:EE:01', volume: 80, muted: false }] },
+    };
+    render(<DevicesScreen />);
+    fireEvent.press(screen.getByLabelText('Mute all'));
+    await waitFor(() => expect(mockSetGroupMuted).toHaveBeenCalledWith(true));
+  });
+
+  it('calls setGroupMuted(false) when unmute button pressed and all are muted', async () => {
+    mockSetGroupMuted.mockResolvedValue(undefined);
+    mockCtx = {
+      ...baseBridgeContext,
+      partyStatus: { active: true, speakers: [{ mac: 'AA:BB:CC:DD:EE:01', volume: 80, muted: true }] },
+    };
+    render(<DevicesScreen />);
+    fireEvent.press(screen.getByLabelText('Unmute all'));
+    await waitFor(() => expect(mockSetGroupMuted).toHaveBeenCalledWith(false));
+  });
+
   // ── Scan & pair ───────────────────────────────────────────────────────────
-
-  it('shows Scan for Speakers button', () => {
-    render(<DevicesScreen />);
-    expect(screen.getByLabelText('Scan for new speakers')).toBeTruthy();
-  });
-
-  it('calls scanBtDevices when scan button is pressed', async () => {
-    mockScanBt.mockResolvedValue(undefined);
-    render(<DevicesScreen />);
-    fireEvent.press(screen.getByLabelText('Scan for new speakers'));
-    await waitFor(() => expect(mockScanBt).toHaveBeenCalled());
-  });
 
   it('shows discovered unpaired devices with Pair button', () => {
     mockCtx = {

@@ -76,6 +76,7 @@ export type BridgeContextType = {
   disconnectBtDevice: (mac: string) => Promise<void>;
   scanBtDevices:      () => Promise<void>;
   pairBtDevice:       (mac: string) => Promise<void>;
+  removeBtDevice:     (mac: string) => Promise<void>;
   // Party mode
   partyStatus:     PartyStatus;
   enableParty:     (macs: string[]) => Promise<void>;
@@ -83,6 +84,8 @@ export type BridgeContextType = {
   setSpeakerVolume:    (mac: string, volume: number) => Promise<void>;
   setSpeakerMuted:     (mac: string, muted: boolean) => Promise<void>;
   setGroupVolume:      (volume: number) => Promise<void>;
+  shiftGroupVolume:    (delta: number) => Promise<void>;
+  setGroupMuted:       (muted: boolean) => Promise<void>;
   adjustSpeakerSync:   (mac: string, deltaMs: number) => Promise<void>;
   // Offline party mode (AirPlay)
   offlineActive:       boolean;
@@ -226,11 +229,16 @@ export default function BridgeProvider({
 
   const pairBtDevice = useCallback(async (mac: string) => {
     await request('/api/bt/pair', { method: 'POST', body: JSON.stringify({ mac }) });
-    // After pairing, refresh the paired device list and mark device as paired
     await fetchBtDevices();
     setDiscoveredDevices(prev =>
       prev.map(d => d.mac === mac ? { ...d, paired: true } : d),
     );
+  }, [request, fetchBtDevices]);
+
+  const removeBtDevice = useCallback(async (mac: string) => {
+    await request(`/api/bt/devices/${mac}`, { method: 'DELETE' });
+    await fetchBtDevices();
+    setDiscoveredDevices(prev => prev.filter(d => d.mac !== mac));
   }, [request, fetchBtDevices]);
 
   // ── Party mode ────────────────────────────────────────────────────────────
@@ -274,6 +282,22 @@ export default function BridgeProvider({
     setPartyStatus(data.party);
   }, [request]);
 
+  const shiftGroupVolume = useCallback(async (delta: number) => {
+    const data = (await request('/api/party/volume/shift', {
+      method: 'POST',
+      body: JSON.stringify({ delta }),
+    })) as { party: PartyStatus };
+    setPartyStatus(data.party);
+  }, [request]);
+
+  const setGroupMuted = useCallback(async (muted: boolean) => {
+    const data = (await request('/api/party/mute', {
+      method: 'POST',
+      body: JSON.stringify({ muted }),
+    })) as { party: PartyStatus };
+    setPartyStatus(data.party);
+  }, [request]);
+
   const enableOfflineParty = useCallback(async (macs: string[]) => {
     const data = (await request('/api/offline/enable', {
       method: 'POST',
@@ -307,8 +331,8 @@ export default function BridgeProvider({
       status, btDevices, discoveredDevices, scanning, isReachable, baseURL,
       play, pause, next, prev, seek, setVolume,
       connect, disconnect, refresh,
-      fetchBtDevices, connectBtDevice, disconnectBtDevice, scanBtDevices, pairBtDevice,
-      partyStatus, enableParty, disableParty, setSpeakerVolume, setSpeakerMuted, setGroupVolume,
+      fetchBtDevices, connectBtDevice, disconnectBtDevice, scanBtDevices, pairBtDevice, removeBtDevice,
+      partyStatus, enableParty, disableParty, setSpeakerVolume, setSpeakerMuted, setGroupVolume, shiftGroupVolume, setGroupMuted,
       adjustSpeakerSync,
       offlineActive, enableOfflineParty, disableOfflineParty,
     }),
@@ -316,8 +340,8 @@ export default function BridgeProvider({
       status, btDevices, discoveredDevices, scanning, isReachable, baseURL,
       play, pause, next, prev, seek, setVolume,
       connect, disconnect, refresh,
-      fetchBtDevices, connectBtDevice, disconnectBtDevice, scanBtDevices, pairBtDevice,
-      partyStatus, enableParty, disableParty, setSpeakerVolume, setSpeakerMuted, setGroupVolume,
+      fetchBtDevices, connectBtDevice, disconnectBtDevice, scanBtDevices, pairBtDevice, removeBtDevice,
+      partyStatus, enableParty, disableParty, setSpeakerVolume, setSpeakerMuted, setGroupVolume, shiftGroupVolume, setGroupMuted,
       adjustSpeakerSync,
       offlineActive, enableOfflineParty, disableOfflineParty,
     ],
