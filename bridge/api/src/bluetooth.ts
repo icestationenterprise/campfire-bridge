@@ -5,6 +5,7 @@
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import type { BluetoothDevice, DiscoveredDevice } from './types';
+import { getAssignedHcis } from './adapters';
 
 const execAsync = promisify(exec);
 
@@ -113,9 +114,16 @@ export async function scanDevices(durationSec = 5): Promise<DiscoveredDevice[]> 
   const [paired, adapters] = await Promise.all([listDevices(), getAdapters()]);
   const pairedMacs = new Set(paired.map(d => d.mac.toUpperCase()));
 
-  // Scan on all adapters in parallel
+  // Only scan on adapters that have no speaker assigned to them.
+  // Running inquiry on an adapter that is streaming A2DP audio causes
+  // the radio to interleave discovery packets with audio packets → dropouts.
+  const assignedHcis = getAssignedHcis();
+  const freeAdapters = adapters.filter(a => !assignedHcis.has(a.hciId));
+  const scanAdapters = freeAdapters.length > 0 ? freeAdapters : adapters;
+
+  // Scan on free adapters in parallel
   await Promise.allSettled(
-    adapters.map(({ hciId }) =>
+    scanAdapters.map(({ hciId }) =>
       execAsync(`bluetoothctl -a ${hciId} --timeout ${durationSec} scan on 2>/dev/null`, {
         timeout: (durationSec + 5) * 1000,
       }),

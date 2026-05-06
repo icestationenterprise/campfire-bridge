@@ -121,6 +121,11 @@ export function getAdapterForDevice(deviceMac: string): string | null {
   return assignments.get(deviceMac) ?? null;
 }
 
+/** Returns the set of hciIds that currently have at least one speaker assigned. */
+export function getAssignedHcis(): Set<string> {
+  return new Set(assignments.values());
+}
+
 /**
  * Re-assign already-connected speakers after a bridge restart
  * (in-memory state is lost on restart, so we rebuild it here).
@@ -165,6 +170,16 @@ export async function getStatus(): Promise<{
 async function adapterMacForHci(hciId: string): Promise<string | null> {
   const adapters = await listAdapters();
   return adapters.find(a => a.hciId === hciId)?.mac ?? null;
+}
+
+/** Count how many devices are permanently paired to an adapter. */
+async function countPairedDevices(hciId: string): Promise<number> {
+  try {
+    const out = await btctlOn(hciId, ['devices Paired'], 5000);
+    return (out.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/g) ?? []).length;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -217,13 +232,15 @@ async function btctlOn(
 // ── Public BT operations (adapter-aware) ──────────────────────────────────────
 
 /**
- * Find which adapter has this device in its paired list.
- * Queries each adapter sequentially to avoid overwhelming bluetoothd.
+ * Find which USB adapter has this device in its paired list.
+ * USB-only: skips UART adapters consistent with connect/pair policy.
  */
 async function findAdapterForPairedDevice(deviceMac: string): Promise<string | null> {
   const all = await listAdapters();
+  const usb = all.filter(a => a.bus === 'USB' && a.up);
+  const candidates = usb.length > 0 ? usb : all.filter(a => a.up);
   const mac = deviceMac.toUpperCase();
-  for (const adapter of all) {
+  for (const adapter of candidates) {
     const out = await btctlOn(adapter.hciId, ['devices Paired'], 5000);
     if (out.toUpperCase().includes(mac)) return adapter.hciId;
   }
@@ -296,33 +313,52 @@ export async function connectDevice(deviceMac: string): Promise<void> {
 }
 
 /**
- * Pair and trust a new Bluetooth device via its assigned adapter.
- * Falls back to hci0 if the assigned adapter fails (e.g. device not in its cache).
- * Pairing can take up to 30 s so we use a longer timeout.
+ * Pair and trust a new Bluetooth device, spreading pairings across USB adapters.
+ * Picks the USB adapter with the fewest existing paired devices so that each
+ * speaker ends up on its own dedicated radio — critical for party mode audio quality.
  */
 export async function pairDevice(deviceMac: string): Promise<void> {
-  // Non-interactive commands are required here: btctlOn sends `pair`, `trust`,
-  // and `quit` in one shot, so bluetoothctl exits before BlueZ finishes writing
-  // the pairing record to disk — the device appears to pair then immediately
-  // reverts. Running each command as a separate process waits for full completion.
-  //
-  // USB-only policy: pair through the first available USB adapter.
   const allUp = (await listAdapters()).filter(a => a.up);
   const usbUp = allUp.filter(a => a.bus === 'USB');
-  const firstUsb = (usbUp.length > 0 ? usbUp : allUp)[0]?.hciId ?? 'hci0';
-  assignments.set(deviceMac, firstUsb);
+  const usbAdapters = usbUp.length > 0 ? usbUp : allUp;
+
+  // Pick the adapter with the fewest permanently paired devices
+  const counts = await Promise.all(usbAdapters.map(a => countPairedDevices(a.hciId)));
+  const minCount = Math.min(...counts);
+  const bestAdapter = usbAdapters[counts.indexOf(minCount)] ?? usbAdapters[0];
+  const bestHci = bestAdapter?.hciId ?? 'hci0';
+
+  assignments.set(deviceMac, bestHci);
   try {
-    const pairResult = await execAsync(`bluetoothctl pair ${deviceMac}`, { timeout: 30_000 })
-      .catch((e: { stdout?: string }) => ({ stdout: e.stdout ?? '' }));
-    const out = pairResult.stdout;
+    // Stop any active scan on all adapters — inquiry mode blocks the pairing handshake
+    await Promise.allSettled(allUp.map(a => btctlOn(a.hciId, ['scan off'], 2_000)));
+
+    // btctlOn with select + pair + trust — pair blocks until BlueZ completes the handshake
+    const out = await btctlOn(bestHci, [`pair ${deviceMac}`, `trust ${deviceMac}`], 30_000);
     if (out.includes('Failed') || out.includes('not available')) {
       throw new Error(`Failed to pair ${deviceMac}`);
     }
-    await execAsync(`bluetoothctl trust ${deviceMac}`, { timeout: 5_000 }).catch(() => {});
-    console.log(`[adapters] paired and trusted ${deviceMac}`);
+    console.log(`[adapters] paired and trusted ${deviceMac} on ${bestHci}`);
   } catch (e) {
     releaseAdapter(deviceMac);
     throw e;
+  }
+}
+
+/**
+ * Remove a paired device from BlueZ and release its adapter slot.
+ * After removal the device must be re-paired before it can connect again.
+ *
+ * Does NOT rely on the in-memory assignment — disconnectDevice() releases it
+ * before remove is typically called, so we query BlueZ directly instead.
+ */
+export async function removeDevice(deviceMac: string): Promise<void> {
+  releaseAdapter(deviceMac);
+  const hci = await findAdapterForPairedDevice(deviceMac);
+  if (hci) {
+    await btctlOn(hci, [`remove ${deviceMac}`], 5_000).catch(() => {});
+  } else {
+    await execAsync(`bluetoothctl remove ${deviceMac}`, { timeout: 5_000 }).catch(() => {});
   }
 }
 

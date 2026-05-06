@@ -131,9 +131,10 @@ setInterval(async () => {
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
-app.get('/api/status', (_req, res) => {
-  state.party = party.getPartyStatus();
-  res.json(state); // includes state.offline
+app.get('/api/status', async (_req, res) => {
+  state.party  = party.getPartyStatus();
+  state.volume = await playerctl.getVolume();
+  res.json(state);
 });
 
 // ── Playback ──────────────────────────────────────────────────────────────────
@@ -252,8 +253,23 @@ app.post('/api/bt/disconnect', async (req, res) => {
  */
 app.post('/api/bt/scan', async (_req, res) => {
   try {
+    // Never run inquiry while party mode is active — scanning on a streaming
+    // adapter interleaves discovery packets with A2DP data, causing audio dropouts.
+    // Return the known paired device list instead (no radio activity needed).
+    if (party.getPartyStatus().active) {
+      const devices = await bluetooth.listDevices();
+      return res.json({ devices: devices.map(d => ({ mac: d.mac, name: d.name, paired: true })) });
+    }
     const devices = await bluetooth.scanDevices(10);
     res.json({ devices });
+  } catch (e) { res.status(500).json({ error: (e as Error).message }); }
+});
+
+app.delete('/api/bt/devices/:mac', async (req, res) => {
+  const { mac } = req.params;
+  try {
+    await adapters.removeDevice(mac);
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: (e as Error).message }); }
 });
 
@@ -370,6 +386,28 @@ app.post('/api/party/speaker/mute', async (req, res) => {
   }
   try {
     await party.setSpeakerMuted(mac, Boolean(muted));
+    res.json({ ok: true, party: party.getPartyStatus() });
+  } catch (e) { res.status(500).json({ error: (e as Error).message }); }
+});
+
+/** Shift every speaker's volume by delta percentage points (preserves relative differences). */
+app.post('/api/party/volume/shift', async (req, res) => {
+  const { delta } = req.body as { delta?: number };
+  if (delta === undefined || isNaN(Number(delta))) {
+    return res.status(400).json({ error: 'delta is required' });
+  }
+  try {
+    await party.shiftGroupVolume(Number(delta));
+    res.json({ ok: true, party: party.getPartyStatus() });
+  } catch (e) { res.status(500).json({ error: (e as Error).message }); }
+});
+
+/** Mute or unmute all party speakers simultaneously. */
+app.post('/api/party/mute', async (req, res) => {
+  const { muted } = req.body as { muted?: boolean };
+  if (muted === undefined) return res.status(400).json({ error: 'muted is required' });
+  try {
+    await party.setGroupMuted(Boolean(muted));
     res.json({ ok: true, party: party.getPartyStatus() });
   } catch (e) { res.status(500).json({ error: (e as Error).message }); }
 });
