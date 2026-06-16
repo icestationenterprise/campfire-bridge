@@ -1,5 +1,10 @@
 # Campfire Bridge — Project Memory
 
+## Product Roadmap
+The living launch plan (roadmap + todo list) is at [`/PLAN.md`](../PLAN.md). Load it first when resuming product work.
+
+---
+
 ## What This Project Is
 A system for playing music on a Bluetooth speaker via a Raspberry Pi bridge.
 - **Phone** controls playback via the iOS app (React Native)
