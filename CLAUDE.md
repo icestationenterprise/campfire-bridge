@@ -94,9 +94,10 @@ Example: "You'd need the backend auth service (#7) running before account screen
 
 ## Git Workflow
 
-- Every time a code or doc change is made in this repo, stage and commit it immediately with a short, descriptive message (`git add` + `git commit`, not just one or the other). Don't batch unrelated changes into one commit.
-- Each commit message should describe what changed and why, in one or two lines — this is the documented history of the project's progress.
-- Push to `origin main` once the full task/request is complete (not after every single commit) — i.e. commit per change, push per finished task.
+- **Never commit or push automatically.** After implementing new, functional code, stop and ask the user to confirm it actually works (they test it — running the app, the script, the device, etc.). Only stage and commit after they explicitly confirm it's working.
+- This confirm-before-commit rule applies to *functional code* specifically. Docs/plan updates (e.g. `PLAN.md`, `CLAUDE.md`, `memory/MEMORY.md`) don't need a working-confirmation — commit those once written.
+- Once confirmed working, `git add` + `git commit` together with a short, descriptive message (what changed and why, one or two lines). Don't batch unrelated changes into one commit.
+- Push to `origin main` once the full task/request is complete (not after every single commit) — i.e. confirm-and-commit per functional change, push per finished task.
 - Remote: `https://github.com/icestationenterprise/campfire-bridge.git`
 
 ## Known Constraints to Keep in Mind
