@@ -9,21 +9,21 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 step() { echo -e "\n${GREEN}▶ $1${NC}"; }
 
-step "1/8  Updating system packages"
+step "1/9  Updating system packages"
 sudo apt update && sudo apt upgrade -y
 
-step "2/8  Installing system dependencies"
+step "2/9  Installing system dependencies"
 sudo apt install -y \
   git curl \
   bluetooth bluez bluez-tools \
   pulseaudio pulseaudio-module-bluetooth \
   shairport-sync
 
-step "3/8  Installing Node.js 20"
+step "3/9  Installing Node.js 20"
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
-step "4/8  Configuring Bluetooth"
+step "4/9  Configuring Bluetooth"
 # Always-on, always discoverable/pairable so speakers can connect
 sudo tee /etc/bluetooth/main.conf > /dev/null << 'EOF'
 [Policy]
@@ -37,7 +37,14 @@ sudo usermod -a -G bluetooth pi
 sudo systemctl enable bluetooth
 sudo systemctl restart bluetooth
 
-step "5/8  Configuring PulseAudio for Bluetooth"
+# Disable the Pi's built-in BT adapter — all speaker output goes through
+# USB dongles only. Must reboot to take effect.
+if ! grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt 2>/dev/null; then
+  echo "dtoverlay=disable-bt" | sudo tee -a /boot/firmware/config.txt
+fi
+sudo systemctl disable hciuart 2>/dev/null || true
+
+step "5/9  Configuring PulseAudio for Bluetooth"
 mkdir -p /home/pi/.config/pulse
 # Load Bluetooth modules on top of the default PulseAudio config
 tee /home/pi/.config/pulse/default.pa > /dev/null << 'EOF'
@@ -58,11 +65,11 @@ pa = {
 };
 EOF
 
-step "6/8  Enabling lingering user session (PulseAudio starts at boot)"
+step "6/9  Enabling lingering user session (PulseAudio starts at boot)"
 # Without this, user systemd services don't start until someone logs in.
 sudo loginctl enable-linger pi
 
-step "7/8  Cloning repo and building bridge"
+step "7/9  Cloning repo and building bridge"
 cd /home/pi
 if [ -d "campfire-bridge/.git" ]; then
   echo "Repo already exists — pulling latest"
@@ -75,7 +82,7 @@ cd bridge/api
 npm install
 npm run build
 
-step "8/8  Installing campfire-bridge as a user systemd service"
+step "8/9  Installing campfire-bridge as a user systemd service"
 # Running as a user service means it shares the pi user's PulseAudio session
 # automatically — no need to pass socket paths manually.
 mkdir -p /home/pi/.config/systemd/user
@@ -100,6 +107,27 @@ EOF
 systemctl --user daemon-reload
 systemctl --user enable campfire-bridge
 systemctl --user start campfire-bridge || true
+
+step "9/9  Configuring camping mode (auto WiFi / hotspot switching)"
+
+# Install NetworkManager hotspot profile
+sudo cp /home/pi/campfire-bridge/bridge/config/campfire-hotspot.nmconnection \
+        /etc/NetworkManager/system-connections/campfire-hotspot.nmconnection
+sudo chmod 600 /etc/NetworkManager/system-connections/campfire-hotspot.nmconnection
+sudo chown root:root /etc/NetworkManager/system-connections/campfire-hotspot.nmconnection
+sudo nmcli con reload
+
+# Install camping-mode daemon
+sudo cp /home/pi/campfire-bridge/bridge/scripts/camping-mode.sh \
+        /usr/local/bin/campfire-camping-mode.sh
+sudo chmod +x /usr/local/bin/campfire-camping-mode.sh
+
+# Install and enable camping-mode systemd service (runs as root/system)
+sudo cp /home/pi/campfire-bridge/bridge/systemd/camping-mode.service \
+        /etc/systemd/system/campfire-camping-mode.service
+sudo systemctl daemon-reload
+sudo systemctl enable campfire-camping-mode.service
+sudo systemctl start campfire-camping-mode.service || true
 
 echo ""
 echo "================================================"

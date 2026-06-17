@@ -1,0 +1,15 @@
+[Unit]
+Description=Campfire Bridge — Camping Mode (auto WiFi/hotspot switching)
+After=NetworkManager.service network.target
+Requires=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/campfire-camping-mode.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

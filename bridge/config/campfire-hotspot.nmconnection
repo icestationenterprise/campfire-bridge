@@ -1,0 +1,28 @@
+# NetworkManager connection profile for the Campfire hotspot.
+# Installed to /etc/NetworkManager/system-connections/ by setup-pi.sh.
+# NM's built-in dnsmasq instance handles DHCP — no separate install needed.
+# autoconnect=false: camping-mode.sh decides when to bring this up/down.
+
+[connection]
+id=campfire-hotspot
+uuid=cb2e8f5a-4d3c-4a1b-8d23-c1f2e3d4a5b6
+type=wifi
+autoconnect=false
+interface-name=wlan0
+
+[wifi]
+mode=ap
+ssid=Campfire
+band=bg
+channel=6
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=campfire123
+
+[ipv4]
+method=shared
+address1=192.168.4.1/24
+
+[ipv6]
+method=disabled
