@@ -13,14 +13,15 @@
 
 import express from 'express';
 import cors from 'cors';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import * as bluetooth from './bluetooth';
 import * as adapters  from './adapters';
 import * as party from './party';
 import * as airplay from './airplay';
 import type { BridgeStatus, BluetoothDevice } from './types';
 
-const NETWORK_MODE_FILE = '/tmp/campfire-network-mode';
+const NETWORK_MODE_FILE   = '/tmp/campfire-network-mode';
+const NETWORK_MODE_REQUEST = '/tmp/campfire-mode-request';
 
 function readNetworkMode(): 'home' | 'camping' {
   try {
@@ -289,6 +290,23 @@ app.post('/api/party/volume', async (req, res) => {
     await party.setGroupVolume(Number(volume));
     res.json({ ok: true, party: party.getPartyStatus() });
   } catch (e) { res.status(500).json({ error: (e as Error).message }); }
+});
+
+// ── Network mode switching ────────────────────────────────────────────────────
+// Writes a request file that camping-mode.sh picks up on its next tick (~30 s).
+// The daemon handles the actual nmcli calls so the API doesn't need sudo.
+
+app.post('/api/network/mode', (req, res) => {
+  const { mode } = req.body as { mode?: string };
+  if (mode !== 'home' && mode !== 'camping') {
+    return res.status(400).json({ error: 'mode must be "home" or "camping"' });
+  }
+  try {
+    writeFileSync(NETWORK_MODE_REQUEST, mode, 'utf8');
+    res.json({ ok: true, requested: mode });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
 });
 
 // ── Export for testing ────────────────────────────────────────────────────────
