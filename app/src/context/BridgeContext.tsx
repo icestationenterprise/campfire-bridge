@@ -20,6 +20,7 @@ import React, {
 export type BridgeStatus = {
   device: string;
   party: PartyStatus;
+  network_mode?: 'home' | 'camping';
 };
 
 export type BluetoothDevice = {
@@ -52,6 +53,7 @@ export type BridgeContextType = {
   discoveredDevices: DiscoveredDevice[];
   scanning: boolean;
   isReachable: boolean;
+  networkMode: 'home' | 'camping' | null;
   baseURL: string;
   refresh: () => Promise<void>;
   // Bluetooth device management
@@ -80,20 +82,29 @@ const BridgeContext = createContext<BridgeContextType | null>(null);
 
 type BridgeProviderProps = {
   baseURL?: string;
+  /** Alternate URL to try after 3 consecutive primary failures. */
+  fallbackUrl?: string;
+  /** Called when the fallback URL successfully responds — use to persist the mode switch. */
+  onFallback?: () => void;
   children: React.ReactNode;
 };
 
 export default function BridgeProvider({
   baseURL = 'http://localhost:3000',
+  fallbackUrl,
+  onFallback,
   children,
 }: BridgeProviderProps) {
-  const [status,    setStatus]    = useState<BridgeStatus | null>(null);
-  const [btDevices, setBtDevices] = useState<BluetoothDevice[]>([]);
+  const [status,      setStatus]      = useState<BridgeStatus | null>(null);
+  const [btDevices,   setBtDevices]   = useState<BluetoothDevice[]>([]);
   const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredDevice[]>([]);
-  const [scanning,  setScanning]  = useState(false);
-  const [isReachable, setReachable] = useState(false);
+  const [scanning,    setScanning]    = useState(false);
+  const [isReachable, setReachable]   = useState(false);
+  const [networkMode, setNetworkMode] = useState<'home' | 'camping' | null>(null);
   const [partyStatus, setPartyStatus] = useState<PartyStatus>({ active: false, speakers: [] });
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef        = useRef<ReturnType<typeof setInterval> | null>(null);
+  const failCount      = useRef(0);
+  const tryingFallback = useRef(false);
 
   // ── Core fetch ────────────────────────────────────────────────────────────
 
@@ -113,18 +124,59 @@ export default function BridgeProvider({
     [baseURL],
   );
 
-  // ── Status polling ────────────────────────────────────────────────────────
+  // ── Status polling with auto-fallback ────────────────────────────────────
+  // After 3 consecutive primary-URL failures, tries fallbackUrl once.
+  // If fallback succeeds, calls onFallback() to persist the mode switch.
+  // Resets on any success or when baseURL changes (manual mode switch).
+
+  const fetchStatus = useCallback(async (url: string): Promise<BridgeStatus> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    try {
+      const res = await fetch(`${url}/api/status`, {
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json() as Promise<BridgeStatus>;
+    } finally {
+      clearTimeout(timer);
+    }
+  }, []);
+
+  // Reset fallback state whenever the primary URL changes (user toggled mode manually).
+  useEffect(() => {
+    failCount.current      = 0;
+    tryingFallback.current = false;
+  }, [baseURL]);
 
   const refresh = useCallback(async () => {
+    const url = tryingFallback.current && fallbackUrl ? fallbackUrl : baseURL;
     try {
-      const s = (await request('/api/status')) as BridgeStatus;
+      const s = await fetchStatus(url);
+      if (tryingFallback.current) {
+        tryingFallback.current = false;
+        onFallback?.();
+      }
+      failCount.current = 0;
       setStatus(s);
       setReachable(true);
       if (s.party) setPartyStatus(s.party);
+      if (s.network_mode) setNetworkMode(s.network_mode);
     } catch {
+      if (tryingFallback.current) {
+        // Fallback also failed — reset and retry primary next cycle.
+        tryingFallback.current = false;
+        failCount.current      = 0;
+      } else {
+        failCount.current += 1;
+        if (failCount.current >= 3 && fallbackUrl && fallbackUrl !== baseURL) {
+          tryingFallback.current = true;
+        }
+      }
       setReachable(false);
     }
-  }, [request]);
+  }, [baseURL, fallbackUrl, onFallback, fetchStatus]);
 
   useEffect(() => {
     refresh();
@@ -245,13 +297,13 @@ export default function BridgeProvider({
 
   const value = useMemo<BridgeContextType>(
     () => ({
-      status, btDevices, discoveredDevices, scanning, isReachable, baseURL, refresh,
+      status, btDevices, discoveredDevices, scanning, isReachable, networkMode, baseURL, refresh,
       fetchBtDevices, connectBtDevice, disconnectBtDevice, scanBtDevices, pairBtDevice, removeBtDevice,
       partyStatus, enableParty, disableParty, setSpeakerVolume, setSpeakerMuted, setGroupVolume, shiftGroupVolume, setGroupMuted,
       adjustSpeakerSync,
     }),
     [
-      status, btDevices, discoveredDevices, scanning, isReachable, baseURL, refresh,
+      status, btDevices, discoveredDevices, scanning, isReachable, networkMode, baseURL, refresh,
       fetchBtDevices, connectBtDevice, disconnectBtDevice, scanBtDevices, pairBtDevice, removeBtDevice,
       partyStatus, enableParty, disableParty, setSpeakerVolume, setSpeakerMuted, setGroupVolume, shiftGroupVolume, setGroupMuted,
       adjustSpeakerSync,
