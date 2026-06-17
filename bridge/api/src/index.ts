@@ -13,11 +13,23 @@
 
 import express from 'express';
 import cors from 'cors';
+import { readFileSync } from 'fs';
 import * as bluetooth from './bluetooth';
 import * as adapters  from './adapters';
 import * as party from './party';
 import * as airplay from './airplay';
 import type { BridgeStatus, BluetoothDevice } from './types';
+
+const NETWORK_MODE_FILE = '/tmp/campfire-network-mode';
+
+function readNetworkMode(): 'home' | 'camping' {
+  try {
+    const raw = readFileSync(NETWORK_MODE_FILE, 'utf8').trim();
+    return raw === 'camping' ? 'camping' : 'home';
+  } catch {
+    return 'home';
+  }
+}
 
 const app = express();
 const PORT        = parseInt(process.env.PORT ?? '3000', 10);
@@ -29,8 +41,9 @@ app.use(express.json());
 // ── State cache ───────────────────────────────────────────────────────────────
 
 const state: BridgeStatus = {
-  device: DEVICE_NAME,
-  party:  { active: false, speakers: [] },
+  device:       DEVICE_NAME,
+  party:        { active: false, speakers: [] },
+  network_mode: 'home',
 };
 
 // ── Startup audio recovery ────────────────────────────────────────────────────
@@ -53,7 +66,8 @@ setTimeout(async () => {
 // ── Status ────────────────────────────────────────────────────────────────────
 
 app.get('/api/status', async (_req, res) => {
-  state.party = party.getPartyStatus();
+  state.party        = party.getPartyStatus();
+  state.network_mode = readNetworkMode();
   res.json(state);
 });
 

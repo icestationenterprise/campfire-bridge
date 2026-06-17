@@ -21,6 +21,7 @@ export type PartyStatus = {
 export type BridgeStatus = {
   device: string;
   party: PartyStatus;
+  network_mode: 'home' | 'camping';
 };
 
 export type BluetoothDevice = {
