@@ -12,9 +12,9 @@ jest.mock('react-native-vector-icons/MaterialIcons', () => 'Icon');
 
 const mockSetSetting = jest.fn();
 let   mockSettings   = {
-  onlineUrl:  'http://localhost:3000',
-  offlineUrl: 'http://192.168.4.1:3000',
-  mode:       'online' as const,
+  homeUrl:    'http://localhost:3000',
+  campingUrl: 'http://192.168.4.1:3000',
+  mode:       'home' as const,
   isLoaded:   true,
 };
 
@@ -27,9 +27,9 @@ jest.mock('../../src/context/SettingsContext', () => ({
 describe('SettingsScreen', () => {
   beforeEach(() => {
     mockSettings = {
-      onlineUrl:  'http://localhost:3000',
-      offlineUrl: 'http://192.168.4.1:3000',
-      mode:       'online',
+      homeUrl:    'http://localhost:3000',
+      campingUrl: 'http://192.168.4.1:3000',
+      mode:       'home',
       isLoaded:   true,
     };
     jest.clearAllMocks();
@@ -39,19 +39,19 @@ describe('SettingsScreen', () => {
     expect(() => render(<SettingsScreen />)).not.toThrow();
   });
 
-  it('shows the current online URL in the input', () => {
+  it('shows the current home URL in the input', () => {
     render(<SettingsScreen />);
     const input = screen.getByDisplayValue('http://localhost:3000');
     expect(input).toBeTruthy();
   });
 
-  it('shows the current offline URL in the input', () => {
+  it('shows the current camping URL in the input', () => {
     render(<SettingsScreen />);
     const input = screen.getByDisplayValue('http://192.168.4.1:3000');
     expect(input).toBeTruthy();
   });
 
-  it('calls setSetting with new online URL when saved', async () => {
+  it('calls setSetting with new home URL when saved', async () => {
     mockSetSetting.mockResolvedValue(undefined);
     render(<SettingsScreen />);
 
@@ -61,7 +61,7 @@ describe('SettingsScreen', () => {
     fireEvent.press(screen.getByText('Save Settings'));
 
     await waitFor(() => {
-      expect(mockSetSetting).toHaveBeenCalledWith('onlineUrl', 'http://192.168.1.50:8080');
+      expect(mockSetSetting).toHaveBeenCalledWith('homeUrl', 'http://192.168.1.50:8080');
     });
   });
 
@@ -76,18 +76,18 @@ describe('SettingsScreen', () => {
     });
   });
 
-  it('calls setSetting with mode=offline when Offline is pressed', async () => {
+  it('calls setSetting with mode=camping when Camping is pressed', async () => {
     mockSetSetting.mockResolvedValue(undefined);
     render(<SettingsScreen />);
 
-    fireEvent.press(screen.getByText('Offline'));
+    fireEvent.press(screen.getByText('Camping'));
 
-    await waitFor(() => expect(mockSetSetting).toHaveBeenCalledWith('mode', 'offline'));
+    await waitFor(() => expect(mockSetSetting).toHaveBeenCalledWith('mode', 'camping'));
   });
 
-  it('shows offline setup instructions when mode is offline', () => {
-    mockSettings = { ...mockSettings, mode: 'offline' };
+  it('shows camping setup instructions when mode is camping', () => {
+    mockSettings = { ...mockSettings, mode: 'camping' };
     render(<SettingsScreen />);
-    expect(screen.getByText('Offline setup')).toBeTruthy();
+    expect(screen.getByText('Camping setup')).toBeTruthy();
   });
 });

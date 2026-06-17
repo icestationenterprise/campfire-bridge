@@ -1,5 +1,5 @@
 /**
- * Tests for SettingsContext: load from AsyncStorage, save, defaults.
+ * Tests for SettingsContext: load from AsyncStorage, save, defaults, migration.
  */
 
 import React from 'react';
@@ -36,8 +36,8 @@ describe('SettingsContext', () => {
 
   it('provides default values before AsyncStorage loads', () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
-    expect(result.current.mode).toBe('online');
-    expect(result.current.bridgeUrl).toBe(result.current.onlineUrl);
+    expect(result.current.mode).toBe('home');
+    expect(result.current.bridgeUrl).toBe(result.current.homeUrl);
     expect(result.current.isLoaded).toBe(false);
   });
 
@@ -48,13 +48,13 @@ describe('SettingsContext', () => {
 
   it('loads saved settings from AsyncStorage', async () => {
     (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(
-      JSON.stringify({ onlineUrl: 'http://192.168.1.10:8080', mode: 'online' }),
+      JSON.stringify({ homeUrl: 'http://192.168.1.10:8080', mode: 'home' }),
     );
 
     const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => expect(result.current.isLoaded).toBe(true));
-    expect(result.current.onlineUrl).toBe('http://192.168.1.10:8080');
+    expect(result.current.homeUrl).toBe('http://192.168.1.10:8080');
     expect(result.current.bridgeUrl).toBe('http://192.168.1.10:8080');
   });
 
@@ -63,25 +63,36 @@ describe('SettingsContext', () => {
     await waitFor(() => expect(result.current.isLoaded).toBe(true));
 
     await act(async () => {
-      await result.current.setSetting('onlineUrl', 'http://10.0.0.5:8080');
+      await result.current.setSetting('homeUrl', 'http://10.0.0.5:8080');
     });
 
-    expect(result.current.onlineUrl).toBe('http://10.0.0.5:8080');
+    expect(result.current.homeUrl).toBe('http://10.0.0.5:8080');
     expect(AsyncStorage.setItem).toHaveBeenCalledWith(
       '@campfire_settings',
       expect.stringContaining('10.0.0.5'),
     );
   });
 
-  it('bridgeUrl switches to offlineUrl when mode is offline', async () => {
+  it('bridgeUrl switches to campingUrl when mode is camping', async () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
     await waitFor(() => expect(result.current.isLoaded).toBe(true));
 
     await act(async () => {
-      await result.current.setSetting('mode', 'offline');
+      await result.current.setSetting('mode', 'camping');
     });
 
-    expect(result.current.bridgeUrl).toBe(result.current.offlineUrl);
+    expect(result.current.bridgeUrl).toBe(result.current.campingUrl);
+  });
+
+  it('migrates old onlineUrl/offlineUrl/mode values from storage', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(
+      JSON.stringify({ onlineUrl: 'http://100.1.2.3:3000', offlineUrl: 'http://192.168.4.1:3000', mode: 'online' }),
+    );
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await waitFor(() => expect(result.current.isLoaded).toBe(true));
+    expect(result.current.homeUrl).toBe('http://100.1.2.3:3000');
+    expect(result.current.campingUrl).toBe('http://192.168.4.1:3000');
+    expect(result.current.mode).toBe('home');
   });
 
   it('falls back to defaults when AsyncStorage read fails', async () => {
@@ -90,7 +101,7 @@ describe('SettingsContext', () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
     await waitFor(() => expect(result.current.isLoaded).toBe(true));
 
-    expect(result.current.mode).toBe('online');
+    expect(result.current.mode).toBe('home');
   });
 
   it('throws if useSettings is used outside SettingsProvider', () => {
