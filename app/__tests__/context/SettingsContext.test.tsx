@@ -36,8 +36,8 @@ describe('SettingsContext', () => {
 
   it('provides default values before AsyncStorage loads', () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
-    expect(result.current.bridgeUrl).toBe('http://localhost:3000');
-    expect(result.current.spotifyClientId).toBe('');
+    expect(result.current.mode).toBe('online');
+    expect(result.current.bridgeUrl).toBe(result.current.onlineUrl);
     expect(result.current.isLoaded).toBe(false);
   });
 
@@ -47,16 +47,15 @@ describe('SettingsContext', () => {
   });
 
   it('loads saved settings from AsyncStorage', async () => {
-    // Seed AsyncStorage with saved settings
     (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(
-      JSON.stringify({ bridgeUrl: 'http://192.168.1.10:8080', spotifyClientId: 'abc123' }),
+      JSON.stringify({ onlineUrl: 'http://192.168.1.10:8080', mode: 'online' }),
     );
 
     const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => expect(result.current.isLoaded).toBe(true));
+    expect(result.current.onlineUrl).toBe('http://192.168.1.10:8080');
     expect(result.current.bridgeUrl).toBe('http://192.168.1.10:8080');
-    expect(result.current.spotifyClientId).toBe('abc123');
   });
 
   it('setSetting updates state and persists to AsyncStorage', async () => {
@@ -64,27 +63,25 @@ describe('SettingsContext', () => {
     await waitFor(() => expect(result.current.isLoaded).toBe(true));
 
     await act(async () => {
-      await result.current.setSetting('bridgeUrl', 'http://10.0.0.5:8080');
+      await result.current.setSetting('onlineUrl', 'http://10.0.0.5:8080');
     });
 
-    expect(result.current.bridgeUrl).toBe('http://10.0.0.5:8080');
+    expect(result.current.onlineUrl).toBe('http://10.0.0.5:8080');
     expect(AsyncStorage.setItem).toHaveBeenCalledWith(
       '@campfire_settings',
       expect.stringContaining('10.0.0.5'),
     );
   });
 
-  it('setSetting can update spotifyClientId independently', async () => {
+  it('bridgeUrl switches to offlineUrl when mode is offline', async () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
     await waitFor(() => expect(result.current.isLoaded).toBe(true));
 
     await act(async () => {
-      await result.current.setSetting('spotifyClientId', 'my_client_id_xyz');
+      await result.current.setSetting('mode', 'offline');
     });
 
-    expect(result.current.spotifyClientId).toBe('my_client_id_xyz');
-    // bridgeUrl should be unchanged
-    expect(result.current.bridgeUrl).toBe('http://localhost:3000');
+    expect(result.current.bridgeUrl).toBe(result.current.offlineUrl);
   });
 
   it('falls back to defaults when AsyncStorage read fails', async () => {
@@ -93,7 +90,7 @@ describe('SettingsContext', () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
     await waitFor(() => expect(result.current.isLoaded).toBe(true));
 
-    expect(result.current.bridgeUrl).toBe('http://localhost:3000');
+    expect(result.current.mode).toBe('online');
   });
 
   it('throws if useSettings is used outside SettingsProvider', () => {

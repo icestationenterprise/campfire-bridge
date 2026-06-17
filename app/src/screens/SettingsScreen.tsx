@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   Pressable,
-  Switch,
   StyleSheet,
   SafeAreaView,
   ScrollView,
@@ -15,19 +14,13 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useSettings } from '../context/SettingsContext';
-import { useSpotify } from '../context/SpotifyContext';
 
 export default function SettingsScreen() {
-  const {
-    onlineUrl, offlineUrl, spotifyClientId,
-    mode, controllerDisabled, setSetting,
-  } = useSettings();
-  const { isAuthenticated, login, logout } = useSpotify();
+  const { onlineUrl, offlineUrl, mode, setSetting } = useSettings();
 
-  const [onlineDraft,   setOnlineDraft]   = useState(onlineUrl);
-  const [offlineDraft,  setOfflineDraft]  = useState(offlineUrl);
-  const [clientIdDraft, setClientIdDraft] = useState(spotifyClientId);
-  const [saved,         setSaved]         = useState(false);
+  const [onlineDraft,  setOnlineDraft]  = useState(onlineUrl);
+  const [offlineDraft, setOfflineDraft] = useState(offlineUrl);
+  const [saved,        setSaved]        = useState(false);
 
   const handleModeChange = async (next: 'online' | 'offline') => {
     await setSetting('mode', next);
@@ -44,26 +37,10 @@ export default function SettingsScreen() {
   };
 
   const handleSave = async () => {
-    await setSetting('onlineUrl',       onlineDraft.trim());
-    await setSetting('offlineUrl',      offlineDraft.trim());
-    await setSetting('spotifyClientId', clientIdDraft.trim());
+    await setSetting('onlineUrl',  onlineDraft.trim());
+    await setSetting('offlineUrl', offlineDraft.trim());
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleSpotifyLogin = async () => {
-    if (!clientIdDraft.trim()) {
-      Alert.alert('Client ID required', 'Enter your Spotify Client ID above and tap Save before connecting.');
-      return;
-    }
-    await login(clientIdDraft.trim());
-  };
-
-  const handleSpotifyLogout = () => {
-    Alert.alert('Disconnect Spotify', 'Remove your Spotify account from Campfire?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Disconnect', style: 'destructive', onPress: () => logout() },
-    ]);
   };
 
   return (
@@ -92,8 +69,8 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.hint}>
               {mode === 'online'
-                ? 'Spotify Connect via bridge. Requires internet (WiFi or cellular via Tailscale).'
-                : 'AirPlay from your phone to the bridge. Connect to "Campfire" WiFi — no internet needed.'}
+                ? 'Reach the bridge over Tailscale — works at home or anywhere with internet.'
+                : 'Reach the bridge directly over its own WiFi hotspot — no internet needed (camping mode).'}
             </Text>
           </View>
 
@@ -136,53 +113,6 @@ export default function SettingsScreen() {
               autoCorrect={false}
               keyboardType="url"
             />
-          </View>
-
-          {/* ── Spotify ───────────────────────────────────────────── */}
-          <Text style={styles.sectionHeader}>Spotify</Text>
-          <View style={styles.card}>
-            <Text style={styles.label}>Client ID</Text>
-            <TextInput
-              style={styles.input}
-              value={clientIdDraft}
-              onChangeText={setClientIdDraft}
-              placeholder="Your Spotify app client ID"
-              placeholderTextColor="#555"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.hint}>
-              Create a free app at <Text style={styles.code}>developer.spotify.com</Text> and add{' '}
-              <Text style={styles.code}>campfire://spotify-callback</Text> as a Redirect URI.
-            </Text>
-            {isAuthenticated ? (
-              <Pressable style={[styles.btn, styles.btnDanger]} onPress={handleSpotifyLogout}>
-                <Icon name="logout" size={16} color="#fff" />
-                <Text style={styles.btnText}>Disconnect Spotify</Text>
-              </Pressable>
-            ) : (
-              <Pressable style={[styles.btn, styles.btnSpotify]} onPress={handleSpotifyLogin}>
-                <Icon name="library-music" size={16} color="#fff" />
-                <Text style={styles.btnText}>Connect Spotify</Text>
-              </Pressable>
-            )}
-          </View>
-
-          {/* ── Player ───────────────────────────────────────────── */}
-          <Text style={styles.sectionHeader}>Player</Text>
-          <View style={styles.card}>
-            <View style={styles.toggleRow}>
-              <View style={styles.toggleLabel}>
-                <Text style={styles.label}>Disable Controller</Text>
-                <Text style={styles.hint}>Hide Campfire's transport controls and use the Spotify app instead.</Text>
-              </View>
-              <Switch
-                value={controllerDisabled}
-                onValueChange={v => setSetting('controllerDisabled', v)}
-                trackColor={{ false: '#333', true: '#1db954' }}
-                thumbColor="#fff"
-              />
-            </View>
           </View>
 
           {/* ── Save ─────────────────────────────────────────────── */}
@@ -238,7 +168,6 @@ const styles = StyleSheet.create({
   },
   inputActive: { borderColor: '#1db954' },
   hint: { color: '#777', fontSize: 12, lineHeight: 18 },
-  code: { color: '#1db954', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
 
   modeRow: { flexDirection: 'row', gap: 8 },
   modeBtn: {
@@ -258,9 +187,4 @@ const styles = StyleSheet.create({
   btnText:    { color: '#fff', fontWeight: '700', fontSize: 15 },
   btnPrimary: { backgroundColor: '#0a84ff' },
   btnSaved:   { backgroundColor: '#1db954' },
-  btnSpotify: { backgroundColor: '#1db954' },
-  btnDanger:  { backgroundColor: '#c0392b' },
-
-  toggleRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  toggleLabel: { flex: 1, gap: 4 },
 });

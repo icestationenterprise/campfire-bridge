@@ -114,14 +114,11 @@ function PartyMemberRow({
 
 export default function DevicesScreen() {
   const {
-    status,
     btDevices,
     discoveredDevices,
     scanning,
     isReachable,
     baseURL,
-    connect,
-    disconnect,
     fetchBtDevices,
     connectBtDevice,
     disconnectBtDevice,
@@ -136,15 +133,11 @@ export default function DevicesScreen() {
     shiftGroupVolume,
     setGroupMuted,
     adjustSpeakerSync,
-    offlineActive,
-    enableOfflineParty,
-    disableOfflineParty,
   } = useBridge();
 
   const [loadingMac,     setLoadingMac]     = useState<string | null>(null);
   const [pairingMac,     setPairingMac]     = useState<string | null>(null);
   const [partyLoading,   setPartyLoading]   = useState(false);
-  const [offlineLoading, setOfflineLoading] = useState(false);
   const [refreshing,     setRefreshing]     = useState(false);
   const [btError,        setBtError]        = useState<string | null>(null);
 
@@ -174,12 +167,6 @@ export default function DevicesScreen() {
     await fetchBtDevices();
     setRefreshing(false);
   }, [fetchBtDevices]);
-
-  const handleBridgeToggle = useCallback(async () => {
-    try {
-      if (status?.connected) { await disconnect(); } else { await connect(); }
-    } catch { /* status will update on next poll */ }
-  }, [status, connect, disconnect]);
 
   const handleBtConnect = useCallback(async (mac: string) => {
     setBtError(null);
@@ -254,18 +241,6 @@ export default function DevicesScreen() {
     try { await disableParty(); } finally { setPartyLoading(false); }
   }, [disableParty]);
 
-  const handleStartOffline = useCallback(async () => {
-    const connectedMacs = btDevices.filter(d => d.connected).map(d => d.mac);
-    if (connectedMacs.length === 0) return;
-    setOfflineLoading(true);
-    try { await enableOfflineParty(connectedMacs); } finally { setOfflineLoading(false); }
-  }, [btDevices, enableOfflineParty]);
-
-  const handleStopOffline = useCallback(async () => {
-    setOfflineLoading(true);
-    try { await disableOfflineParty(); } finally { setOfflineLoading(false); }
-  }, [disableOfflineParty]);
-
   const handleMuteToggle = useCallback((mac: string, muted: boolean) => {
     setSpeakerMuted(mac, muted);
   }, [setSpeakerMuted]);
@@ -277,9 +252,6 @@ export default function DevicesScreen() {
   const handleSyncAdjust = useCallback(async (mac: string, deltaMs: number) => {
     try { await adjustSpeakerSync(mac, deltaMs); } catch { /* non-fatal */ }
   }, [adjustSpeakerSync]);
-
-  // Online party = party active but NOT via AirPlay/offline mode
-  const onlinePartyActive = partyStatus.active && !offlineActive;
 
   // Devices not yet in the party (connected but party hasn't started, or
   // connected after party started and auto-add hasn't run yet)
@@ -328,44 +300,40 @@ export default function DevicesScreen() {
                 <Text style={styles.pillText}>{isReachable ? 'Online' : 'Offline'}</Text>
               </View>
             </View>
-
-            {isReachable && (
-              <Pressable
-                style={[styles.actionBtn, status?.connected ? styles.btnDanger : styles.btnGreen]}
-                onPress={handleBridgeToggle}
-              >
-                <Text style={styles.actionBtnText}>
-                  {status?.connected ? 'Disconnect Bridge' : 'Connect Bridge'}
-                </Text>
-              </Pressable>
-            )}
           </View>
         </View>
 
-        {/* ── Party ───────────────────────────────────────────────────────── */}
+        {/* ── Playback (party mode + AirPlay) ───────────────────────────────── */}
         {isReachable && (
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Party</Text>
+            <Text style={styles.sectionHeader}>Playback</Text>
 
             {/* Control row */}
-            <View style={styles.partyControlCard}>
+            <View style={[styles.partyControlCard, partyStatus.active && styles.offlineActiveCard]}>
               <View style={styles.row}>
                 <View style={styles.rowLeft}>
                   <Icon
-                    name={partyStatus.active ? 'surround-sound' : 'speaker-group'}
+                    name="airplay"
                     size={24}
-                    color={partyStatus.active ? '#f39c12' : '#aaa'}
+                    color={partyStatus.active ? '#5b9cf6' : '#aaa'}
                   />
-                  <Text style={[styles.deviceName, { marginLeft: 12 }]}>
-                    {partyStatus.active
-                      ? `${partyStatus.speakers.length} speaker${partyStatus.speakers.length !== 1 ? 's' : ''} in sync`
-                      : 'Party off'}
-                  </Text>
+                  <View style={styles.labelStack}>
+                    <Text style={styles.deviceName}>
+                      {partyStatus.active
+                        ? `AirPlay Active — ${partyStatus.speakers.length} speaker${partyStatus.speakers.length !== 1 ? 's' : ''} in sync`
+                        : 'AirPlay Off'}
+                    </Text>
+                    <Text style={styles.deviceSub}>
+                      {partyStatus.active
+                        ? 'Open any music app → AirPlay → Campfire Bridge'
+                        : 'Connect a speaker below, then tap Start'}
+                    </Text>
+                  </View>
                 </View>
 
                 {partyLoading ? (
                   <ActivityIndicator size="small" color="#f39c12" />
-                ) : onlinePartyActive ? (
+                ) : partyStatus.active ? (
                   <Pressable style={[styles.smallBtn, styles.btnDanger]} onPress={handleStopParty}>
                     <Text style={styles.smallBtnText}>Stop</Text>
                   </Pressable>
@@ -373,10 +341,10 @@ export default function DevicesScreen() {
                   <Pressable
                     style={[
                       styles.smallBtn,
-                      btDevices.some(d => d.connected) && !offlineActive ? styles.btnParty : styles.btnDisabled,
+                      btDevices.some(d => d.connected) ? styles.btnParty : styles.btnDisabled,
                     ]}
                     onPress={handleStartParty}
-                    disabled={!btDevices.some(d => d.connected) || offlineActive}
+                    disabled={!btDevices.some(d => d.connected)}
                     accessibilityLabel="Start Party"
                   >
                     <Text style={styles.smallBtnText}>Start</Text>
@@ -445,56 +413,6 @@ export default function DevicesScreen() {
                 </View>
               </View>
             ))}
-          </View>
-        )}
-
-        {/* ── Offline party mode (AirPlay) ────────────────────────────────── */}
-        {isReachable && (
-          <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Offline Party</Text>
-            <View style={[styles.partyControlCard, offlineActive && styles.offlineActiveCard]}>
-              <View style={styles.row}>
-                <View style={styles.rowLeft}>
-                  <Icon
-                    name="airplay"
-                    size={24}
-                    color={offlineActive ? '#5b9cf6' : '#aaa'}
-                  />
-                  <View style={styles.labelStack}>
-                    <Text style={styles.deviceName}>
-                      {offlineActive ? 'AirPlay Active' : 'AirPlay Off'}
-                    </Text>
-                    <Text style={styles.deviceSub}>
-                      {offlineActive
-                        ? 'Open any music app → AirPlay → Campfire Bridge'
-                        : 'Stream from iPhone without internet'}
-                    </Text>
-                  </View>
-                </View>
-
-                {offlineLoading ? (
-                  <ActivityIndicator size="small" color="#5b9cf6" />
-                ) : offlineActive ? (
-                  <Pressable
-                    style={[styles.smallBtn, styles.btnDanger]}
-                    onPress={handleStopOffline}
-                  >
-                    <Text style={styles.smallBtnText}>Stop</Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    style={[
-                      styles.smallBtn,
-                      btDevices.some(d => d.connected) && !onlinePartyActive ? styles.btnOffline : styles.btnDisabled,
-                    ]}
-                    onPress={handleStartOffline}
-                    disabled={!btDevices.some(d => d.connected) || onlinePartyActive}
-                  >
-                    <Text style={styles.smallBtnText}>Start</Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
           </View>
         )}
 
@@ -724,14 +642,6 @@ const styles = StyleSheet.create({
   pillRed:   { backgroundColor: '#e74c3c20' },
   pillText:  { fontSize: 12, fontWeight: '600', color: '#fff' },
 
-  actionBtn: {
-    marginTop: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  actionBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-
   smallBtn: {
     paddingHorizontal: 14,
     paddingVertical: 7,
@@ -744,7 +654,6 @@ const styles = StyleSheet.create({
   btnGreen:    { backgroundColor: '#1db954' },
   btnDanger:   { backgroundColor: '#c0392b' },
   btnParty:    { backgroundColor: '#f39c12' },
-  btnOffline:  { backgroundColor: '#5b9cf6' },
   btnDisabled: { backgroundColor: '#444' },
 
   btnColumn: { alignItems: 'flex-end', gap: 4 },

@@ -1,5 +1,5 @@
 /**
- * Tests for BridgeContext: status polling, playback commands, BT device management.
+ * Tests for BridgeContext: status polling, party mode, BT device management.
  */
 
 import React from 'react';
@@ -12,10 +12,7 @@ const BASE_URL = 'http://localhost:3000';
 
 const mockStatus = {
   device: 'Test Bridge',
-  connected: true,
-  playing: false,
-  track: { title: 'Test Track', artist: 'Test Artist', position_ms: 0, duration_ms: 180000 },
-  volume: 60,
+  party: { active: false, speakers: [] },
 };
 
 const mockBtDevices = {
@@ -50,7 +47,6 @@ describe('BridgeContext — status polling', () => {
       expect(result.current.isReachable).toBe(true);
     });
     expect(result.current.status?.device).toBe('Test Bridge');
-    expect(result.current.status?.playing).toBe(false);
   });
 
   it('sets isReachable=false when the bridge is unreachable', async () => {
@@ -80,77 +76,46 @@ describe('BridgeContext — status polling', () => {
   });
 });
 
-// ── Playback commands ─────────────────────────────────────────────────────────
+// ── Party mode + AirPlay ───────────────────────────────────────────────────────
 
-describe('BridgeContext — playback commands', () => {
+describe('BridgeContext — party mode', () => {
   beforeEach(() => {
     fetchMock.resetMocks();
-    // First call: initial status poll; subsequent calls: command + refresh
     fetchMock.mockResponse(JSON.stringify(mockStatus));
   });
 
-  it('play() POSTs to /api/play then refreshes status', async () => {
+  it('enableParty() POSTs to /api/party/enable with macs', async () => {
     const { result } = renderHook(() => useBridge(), { wrapper });
     await waitFor(() => expect(result.current.isReachable).toBe(true));
 
-    await act(async () => { await result.current.play(); });
+    await act(async () => { await result.current.enableParty(['AA:BB:CC:DD:EE:01']); });
+
+    const call = fetchMock.mock.calls.find(c => (c[0] as string).endsWith('/api/party/enable'));
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body.macs).toEqual(['AA:BB:CC:DD:EE:01']);
+  });
+
+  it('disableParty() POSTs to /api/party/disable', async () => {
+    const { result } = renderHook(() => useBridge(), { wrapper });
+    await waitFor(() => expect(result.current.isReachable).toBe(true));
+
+    await act(async () => { await result.current.disableParty(); });
 
     const urls = fetchMock.mock.calls.map(c => c[0] as string);
-    expect(urls.some(u => u.endsWith('/api/play'))).toBe(true);
+    expect(urls.some(u => u.endsWith('/api/party/disable'))).toBe(true);
   });
 
-  it('pause() POSTs to /api/pause', async () => {
+  it('setSpeakerVolume() POSTs to /api/party/speaker/volume with mac and volume', async () => {
     const { result } = renderHook(() => useBridge(), { wrapper });
     await waitFor(() => expect(result.current.isReachable).toBe(true));
 
-    await act(async () => { await result.current.pause(); });
+    await act(async () => { await result.current.setSpeakerVolume('AA:BB:CC:DD:EE:01', 75); });
 
-    const urls = fetchMock.mock.calls.map(c => c[0] as string);
-    expect(urls.some(u => u.endsWith('/api/pause'))).toBe(true);
-  });
-
-  it('next() POSTs to /api/next', async () => {
-    const { result } = renderHook(() => useBridge(), { wrapper });
-    await waitFor(() => expect(result.current.isReachable).toBe(true));
-
-    await act(async () => { await result.current.next(); });
-
-    const urls = fetchMock.mock.calls.map(c => c[0] as string);
-    expect(urls.some(u => u.endsWith('/api/next'))).toBe(true);
-  });
-
-  it('prev() POSTs to /api/previous', async () => {
-    const { result } = renderHook(() => useBridge(), { wrapper });
-    await waitFor(() => expect(result.current.isReachable).toBe(true));
-
-    await act(async () => { await result.current.prev(); });
-
-    const urls = fetchMock.mock.calls.map(c => c[0] as string);
-    expect(urls.some(u => u.endsWith('/api/previous'))).toBe(true);
-  });
-
-  it('seek() POSTs to /api/seek with position_ms', async () => {
-    const { result } = renderHook(() => useBridge(), { wrapper });
-    await waitFor(() => expect(result.current.isReachable).toBe(true));
-
-    await act(async () => { await result.current.seek(45000); });
-
-    const seekCall = fetchMock.mock.calls.find(c => (c[0] as string).endsWith('/api/seek'));
-    expect(seekCall).toBeDefined();
-    const body = JSON.parse((seekCall![1] as RequestInit).body as string);
-    expect(body.position_ms).toBe(45000);
-  });
-
-  it('setVolume() POSTs to /api/volume with volume', async () => {
-    const { result } = renderHook(() => useBridge(), { wrapper });
-    await waitFor(() => expect(result.current.isReachable).toBe(true));
-
-    await act(async () => { await result.current.setVolume(75); });
-
-    const volCall = fetchMock.mock.calls.find(c => (c[0] as string).endsWith('/api/volume'));
-    expect(volCall).toBeDefined();
-    const body = JSON.parse((volCall![1] as RequestInit).body as string);
-    expect(body.volume).toBe(75);
+    const call = fetchMock.mock.calls.find(c => (c[0] as string).endsWith('/api/party/speaker/volume'));
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body).toEqual({ mac: 'AA:BB:CC:DD:EE:01', volume: 75 });
   });
 });
 

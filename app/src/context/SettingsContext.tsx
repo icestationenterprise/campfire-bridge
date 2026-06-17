@@ -14,16 +14,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type AppMode = 'online' | 'offline';
 
 export type Settings = {
-  /** URL used in Online mode (Tailscale IP) */
+  /** URL used in Online mode (Tailscale IP — home or remote, needs internet) */
   onlineUrl: string;
-  /** URL used in Offline mode (Campfire hotspot) */
+  /** URL used in Offline mode (Campfire hotspot — camping, no internet needed) */
   offlineUrl: string;
-  /** Spotify OAuth client ID */
-  spotifyClientId: string;
-  /** online = Spotify Connect via Pi; offline = AirPlay via Pi hotspot */
+  /** online = reach the bridge over Tailscale; offline = reach it via its own hotspot */
   mode: AppMode;
-  /** Hide Campfire transport controls, use Spotify app instead */
-  controllerDisabled: boolean;
 };
 
 type SettingsContextType = Settings & {
@@ -36,11 +32,9 @@ type SettingsContextType = Settings & {
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
 const DEFAULTS: Settings = {
-  onlineUrl:          'http://100.102.229.11:3000',
-  offlineUrl:         'http://192.168.4.1:3000',
-  spotifyClientId:    '',
-  mode:               'online',
-  controllerDisabled: false,
+  onlineUrl:  'http://100.102.229.11:3000',
+  offlineUrl: 'http://192.168.4.1:3000',
+  mode:       'online',
 };
 
 const STORAGE_KEY = '@campfire_settings';

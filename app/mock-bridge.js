@@ -3,6 +3,10 @@
  * Simulates the Raspberry Pi bridge API for local development.
  * Run with: npm run mock
  * Listens on http://localhost:3000
+ *
+ * Mirrors bridge/api/src/index.ts: no playback routes (AirPlay/Cast handle
+ * playback on-device) — just device status, Bluetooth management, and
+ * party mode (which also represents AirPlay being active).
  */
 const express = require('express');
 const app = express();
@@ -14,87 +18,20 @@ app.use((req, _res, next) => {
 
 // ── In-memory state ──────────────────────────────────────────────────────────
 
-let status = {
-  device: 'Mock Bridge',
-  connected: true,
-  playing: false,
-  track: { title: '—', artist: '—', position_ms: 0, duration_ms: 180000 },
-  volume: 60,
-};
-
 const btDevices = [
   { mac: 'AA:BB:CC:DD:EE:01', name: 'Living Room Speaker', connected: true },
   { mac: 'AA:BB:CC:DD:EE:02', name: 'Bedroom Speaker',     connected: false },
 ];
 
-// Advance playhead every second while playing
-setInterval(() => {
-  if (status.playing) {
-    status.track.position_ms += 1000;
-    if (status.track.position_ms >= status.track.duration_ms) {
-      status.track.position_ms = 0;
-      status.playing = false;
-    }
-  }
-}, 1000);
+let party = { active: false, speakers: [] };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function nextTrack(title, artist, duration = 210000) {
-  status.track = { title, artist, position_ms: 0, duration_ms: duration };
-  status.playing = true;
+function status() {
+  return { device: 'Mock Bridge', party };
 }
 
 // ── Status ───────────────────────────────────────────────────────────────────
 
-app.get('/api/status', (_req, res) => res.json(status));
-
-// ── Playback controls (individual routes, matching BridgeContext) ─────────────
-
-app.post('/api/play', (_req, res) => {
-  status.playing = true;
-  res.json({ ok: true, status });
-});
-
-app.post('/api/pause', (_req, res) => {
-  status.playing = false;
-  res.json({ ok: true, status });
-});
-
-app.post('/api/next', (_req, res) => {
-  nextTrack('Next Track', 'Mock Artist');
-  res.json({ ok: true, status });
-});
-
-app.post('/api/previous', (_req, res) => {
-  nextTrack('Previous Track', 'Mock Artist');
-  res.json({ ok: true, status });
-});
-
-app.post('/api/seek', (req, res) => {
-  const position_ms = Number(req.body?.position_ms);
-  if (!Number.isFinite(position_ms)) return res.status(400).json({ error: 'position_ms required' });
-  status.track.position_ms = Math.max(0, Math.min(position_ms, status.track.duration_ms));
-  res.json({ ok: true, status });
-});
-
-app.post('/api/volume', (req, res) => {
-  const volume = Number(req.body?.volume ?? req.body?.level);
-  if (!Number.isFinite(volume)) return res.status(400).json({ error: 'volume required' });
-  status.volume = Math.max(0, Math.min(100, volume));
-  res.json({ ok: true, status });
-});
-
-// Bridge connect/disconnect (bridge-level, not BT)
-app.post('/api/connect', (_req, res) => {
-  status.connected = true;
-  res.json({ ok: true, status });
-});
-
-app.post('/api/disconnect', (_req, res) => {
-  status.connected = false;
-  res.json({ ok: true, status });
-});
+app.get('/api/status', (_req, res) => res.json(status()));
 
 // ── Bluetooth device management ───────────────────────────────────────────────
 
@@ -122,6 +59,74 @@ app.post('/api/bt/pair', (req, res) => {
   const exists = btDevices.find(d => d.mac === mac);
   if (!exists) btDevices.push({ mac, name: `Device ${mac}`, connected: false });
   res.json({ ok: true });
+});
+
+app.post('/api/bt/scan', (_req, res) => {
+  res.json({ devices: btDevices.map(d => ({ mac: d.mac, name: d.name, paired: true })) });
+});
+
+app.delete('/api/bt/devices/:mac', (req, res) => {
+  const idx = btDevices.findIndex(d => d.mac === req.params.mac);
+  if (idx !== -1) btDevices.splice(idx, 1);
+  res.json({ ok: true });
+});
+
+// ── Party mode + AirPlay ───────────────────────────────────────────────────────
+// Enabling party mode also represents AirPlay turning on (no separate toggle —
+// see bridge/api/src/index.ts POST /api/party/enable|disable).
+
+app.get('/api/party', (_req, res) => res.json(party));
+
+app.post('/api/party/enable', (req, res) => {
+  const { macs } = req.body || {};
+  if (!Array.isArray(macs) || macs.length === 0) {
+    return res.status(400).json({ error: 'macs array is required' });
+  }
+  party = {
+    active: true,
+    speakers: macs.map(mac => {
+      const existing = party.speakers.find(s => s.mac === mac);
+      return existing ?? { mac, volume: 80, muted: false, calibration_ms: 0 };
+    }),
+  };
+  res.json({ ok: true, party });
+});
+
+app.post('/api/party/disable', (_req, res) => {
+  party = { active: false, speakers: [] };
+  res.json({ ok: true, party });
+});
+
+app.post('/api/party/speaker/volume', (req, res) => {
+  const { mac, volume } = req.body || {};
+  const s = party.speakers.find(s => s.mac === mac);
+  if (s) s.volume = volume;
+  res.json({ ok: true, party });
+});
+
+app.post('/api/party/speaker/mute', (req, res) => {
+  const { mac, muted } = req.body || {};
+  const s = party.speakers.find(s => s.mac === mac);
+  if (s) s.muted = muted;
+  res.json({ ok: true, party });
+});
+
+app.post('/api/party/volume', (req, res) => {
+  const { volume } = req.body || {};
+  party.speakers.forEach(s => { s.volume = volume; });
+  res.json({ ok: true, party });
+});
+
+app.post('/api/party/volume/shift', (req, res) => {
+  const { delta } = req.body || {};
+  party.speakers.forEach(s => { s.volume = Math.max(0, Math.min(100, s.volume + delta)); });
+  res.json({ ok: true, party });
+});
+
+app.post('/api/party/mute', (req, res) => {
+  const { muted } = req.body || {};
+  party.speakers.forEach(s => { s.muted = muted; });
+  res.json({ ok: true, party });
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────

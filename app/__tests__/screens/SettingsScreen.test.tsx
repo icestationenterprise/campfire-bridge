@@ -11,30 +11,27 @@ jest.mock('react-native-vector-icons/MaterialIcons', () => 'Icon');
 // ── Mock contexts ─────────────────────────────────────────────────────────────
 
 const mockSetSetting = jest.fn();
-let   mockSettings   = { bridgeUrl: 'http://localhost:3000', spotifyClientId: '', isLoaded: true };
+let   mockSettings   = {
+  onlineUrl:  'http://localhost:3000',
+  offlineUrl: 'http://192.168.4.1:3000',
+  mode:       'online' as const,
+  isLoaded:   true,
+};
 
 jest.mock('../../src/context/SettingsContext', () => ({
   useSettings: () => ({ ...mockSettings, setSetting: mockSetSetting }),
-}));
-
-const mockLogin  = jest.fn();
-const mockLogout = jest.fn();
-let   mockIsAuthenticated = false;
-
-jest.mock('../../src/context/SpotifyContext', () => ({
-  useSpotify: () => ({
-    isAuthenticated: mockIsAuthenticated,
-    login:  mockLogin,
-    logout: mockLogout,
-  }),
 }));
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('SettingsScreen', () => {
   beforeEach(() => {
-    mockSettings        = { bridgeUrl: 'http://localhost:3000', spotifyClientId: '', isLoaded: true };
-    mockIsAuthenticated = false;
+    mockSettings = {
+      onlineUrl:  'http://localhost:3000',
+      offlineUrl: 'http://192.168.4.1:3000',
+      mode:       'online',
+      isLoaded:   true,
+    };
     jest.clearAllMocks();
   });
 
@@ -42,25 +39,19 @@ describe('SettingsScreen', () => {
     expect(() => render(<SettingsScreen />)).not.toThrow();
   });
 
-  it('shows the current bridge URL in the input', () => {
+  it('shows the current online URL in the input', () => {
     render(<SettingsScreen />);
     const input = screen.getByDisplayValue('http://localhost:3000');
     expect(input).toBeTruthy();
   });
 
-  it('shows "Connect Spotify" button when not authenticated', () => {
-    mockIsAuthenticated = false;
+  it('shows the current offline URL in the input', () => {
     render(<SettingsScreen />);
-    expect(screen.getByText('Connect Spotify')).toBeTruthy();
+    const input = screen.getByDisplayValue('http://192.168.4.1:3000');
+    expect(input).toBeTruthy();
   });
 
-  it('shows "Disconnect Spotify" button when authenticated', () => {
-    mockIsAuthenticated = true;
-    render(<SettingsScreen />);
-    expect(screen.getByText('Disconnect Spotify')).toBeTruthy();
-  });
-
-  it('calls setSetting with new bridge URL when saved', async () => {
+  it('calls setSetting with new online URL when saved', async () => {
     mockSetSetting.mockResolvedValue(undefined);
     render(<SettingsScreen />);
 
@@ -70,7 +61,7 @@ describe('SettingsScreen', () => {
     fireEvent.press(screen.getByText('Save Settings'));
 
     await waitFor(() => {
-      expect(mockSetSetting).toHaveBeenCalledWith('bridgeUrl', 'http://192.168.1.50:8080');
+      expect(mockSetSetting).toHaveBeenCalledWith('onlineUrl', 'http://192.168.1.50:8080');
     });
   });
 
@@ -85,18 +76,18 @@ describe('SettingsScreen', () => {
     });
   });
 
-  it('calls login when Connect Spotify is pressed with a client ID', async () => {
-    mockLogin.mockResolvedValue(undefined);
-    mockSettings = { bridgeUrl: 'http://localhost:3000', spotifyClientId: 'my_id', isLoaded: true };
+  it('calls setSetting with mode=offline when Offline is pressed', async () => {
+    mockSetSetting.mockResolvedValue(undefined);
     render(<SettingsScreen />);
 
-    fireEvent.press(screen.getByText('Connect Spotify'));
+    fireEvent.press(screen.getByText('Offline'));
 
-    await waitFor(() => expect(mockLogin).toHaveBeenCalledWith('my_id'));
+    await waitFor(() => expect(mockSetSetting).toHaveBeenCalledWith('mode', 'offline'));
   });
 
-  it('shows the developer.spotify.com hint text', () => {
+  it('shows offline setup instructions when mode is offline', () => {
+    mockSettings = { ...mockSettings, mode: 'offline' };
     render(<SettingsScreen />);
-    expect(screen.getByText(/developer\.spotify\.com/)).toBeTruthy();
+    expect(screen.getByText('Offline setup')).toBeTruthy();
   });
 });

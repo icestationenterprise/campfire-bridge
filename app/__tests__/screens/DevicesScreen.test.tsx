@@ -22,8 +22,6 @@ jest.mock('@react-native-community/slider', () => {
 const mockConnectBt         = jest.fn();
 const mockDisconnectBt      = jest.fn();
 const mockFetchBt           = jest.fn();
-const mockConnect           = jest.fn();
-const mockDisconnect        = jest.fn();
 const mockEnableParty       = jest.fn();
 const mockDisableParty      = jest.fn();
 const mockSetSpeakerVolume  = jest.fn();
@@ -35,32 +33,24 @@ const mockScanBt            = jest.fn();
 const mockPairBt            = jest.fn();
 const mockRemoveBt          = jest.fn();
 const mockAdjustSpeakerSync = jest.fn();
-const mockEnableOffline     = jest.fn();
-const mockDisableOffline    = jest.fn();
 
 const baseBridgeContext = {
   status: {
-    device: 'Test Bridge', connected: true, playing: false,
-    track: { title: '', artist: '', position_ms: 0, duration_ms: 0 },
-    volume: 60,
+    device: 'Test Bridge',
     party: { active: false, speakers: [] },
-    offline: false,
   },
   btDevices:         [],
   discoveredDevices: [],
   scanning:          false,
   isReachable:       true,
   baseURL:           'http://localhost:3000',
-  connect:           mockConnect,
-  disconnect:        mockDisconnect,
+  refresh: jest.fn(),
   fetchBtDevices:    mockFetchBt,
   connectBtDevice:   mockConnectBt,
   disconnectBtDevice: mockDisconnectBt,
   scanBtDevices:     mockScanBt,
   pairBtDevice:      mockPairBt,
   removeBtDevice:    mockRemoveBt,
-  play: jest.fn(), pause: jest.fn(), next: jest.fn(), prev: jest.fn(),
-  seek: jest.fn(), setVolume: jest.fn(), refresh: jest.fn(),
   partyStatus:         { active: false, speakers: [] },
   enableParty:         mockEnableParty,
   disableParty:        mockDisableParty,
@@ -70,9 +60,6 @@ const baseBridgeContext = {
   shiftGroupVolume:    mockShiftGroupVolume,
   setGroupMuted:       mockSetGroupMuted,
   adjustSpeakerSync:   mockAdjustSpeakerSync,
-  offlineActive:       false,
-  enableOfflineParty:  mockEnableOffline,
-  disableOfflineParty: mockDisableOffline,
 };
 
 let mockCtx = { ...baseBridgeContext };
@@ -212,9 +199,9 @@ describe('DevicesScreen', () => {
 
   // ── Party mode ────────────────────────────────────────────────────────────
 
-  it('shows Party section when bridge is reachable', () => {
+  it('shows Playback section when bridge is reachable', () => {
     render(<DevicesScreen />);
-    expect(screen.getByText('Party')).toBeTruthy();
+    expect(screen.getByText('Playback')).toBeTruthy();
   });
 
   it('Start button is disabled when no speakers are connected', () => {
