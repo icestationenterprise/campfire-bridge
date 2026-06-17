@@ -16,7 +16,7 @@ Configuration
 3. Set environment variables in .env
 
 Services
-* librespot.service - Spotify Connect receiver
+* shairport-sync - AirPlay receiver (started/stopped with party mode)
 * bridge-api.service - REST/WebSocket API
 * pulseaudio.service - Audio routing
 * bt_autoreconnect.service - Bluetooth auto-reconnect

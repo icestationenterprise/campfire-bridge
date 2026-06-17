@@ -1,12 +1,3 @@
-export type Track = {
-  title: string;
-  artist: string;
-  album?: string;
-  art_url?: string;
-  position_ms: number;
-  duration_ms: number;
-};
-
 /** Per-speaker state tracked while party mode is active. */
 export type SpeakerState = {
   mac: string;
@@ -20,14 +11,16 @@ export type PartyStatus = {
   speakers: SpeakerState[];
 };
 
+/**
+ * Bridge status. Playback itself has no local representation — audio comes
+ * from AirPlay (iOS) or Cast (Android) sessions initiated on the phone, and
+ * plays independently of this API. `party` reflects whether the campfire_party
+ * sink is loaded and which speakers are receiving audio through it; AirPlay
+ * is started/stopped together with party mode (see /api/party/enable|disable).
+ */
 export type BridgeStatus = {
   device: string;
-  connected: boolean;
-  playing: boolean;
-  track: Track;
-  volume: number; // 0–100
   party: PartyStatus;
-  offline: boolean; // true when AirPlay (shairport-sync) is active
 };
 
 export type BluetoothDevice = {

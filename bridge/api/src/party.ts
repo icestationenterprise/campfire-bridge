@@ -8,7 +8,7 @@
  * the slowest one.
  *
  * Signal path:
- *   librespot → campfire_party (null sink)
+ *   shairport-sync (AirPlay) → campfire_party (null sink)
  *               └─ loopback (latency_msec = max - own + BASE) → bluez_sink.MAC.a2dp_sink
  *               └─ loopback (latency_msec = max - own + BASE) → bluez_sink.MAC.a2dp_sink
  *               └─ ...
@@ -22,7 +22,6 @@ import { promisify } from 'util';
 import * as fs   from 'fs';
 import * as path from 'path';
 import type { SpeakerState, PartyStatus } from './types';
-import * as playerctl from './playerctl';
 
 const execAsync = promisify(exec);
 
@@ -132,7 +131,7 @@ async function loadPartySink(macs: string[]): Promise<void> {
   const maxLatency = Math.max(...measured.map(s => s.latencyMs));
   const BASE_MS    = 50; // minimum loopback buffer to keep PulseAudio happy
 
-  // Virtual input — librespot outputs here
+  // Virtual input — shairport-sync (AirPlay) outputs here
   const sinkOut = await pactl(
     'load-module module-null-sink sink_name=campfire_party ' +
     'sink_properties=device.description=CampfireParty',
@@ -274,12 +273,13 @@ export async function setGroupVolume(volume: number): Promise<void> {
 }
 
 /** Shift the master party volume by delta percentage points.
- *  Controls campfire_party (the null sink all speakers read from), which is
- *  the same layer as the music page slider — both use @DEFAULT_SINK@. */
+ *  Controls @DEFAULT_SINK@ directly — campfire_party while party mode is active. */
 export async function shiftGroupVolume(delta: number): Promise<void> {
-  const current = await playerctl.getVolume();
+  const out = await pactl('get-sink-volume @DEFAULT_SINK@');
+  const match = out.match(/(\d+)%/);
+  const current = match ? parseInt(match[1], 10) : 50;
   const next = Math.max(0, Math.min(100, Math.round(current + delta)));
-  await playerctl.setVolume(next);
+  await pactl(`set-sink-volume @DEFAULT_SINK@ ${next}%`);
 }
 
 /** Mute or unmute all speakers simultaneously. */

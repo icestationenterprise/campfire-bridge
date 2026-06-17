@@ -39,15 +39,7 @@ sudo ufw allow 22/tcp
 sudo ufw allow 8080/tcp
 sudo ufw --force enable
 
-=== Install librespot ===
-echo "Installing librespot..."
-cd /tmp
-curl -L https://github.com/librespot-org/librespot/releases/latest/download/librespot-linux-arm64.tar.gz | tar xz
-sudo mv librespot /usr/local/bin/
-sudo chown root:root /usr/local/bin/librespot
-sudo chmod +x /usr/local/bin/librespot
-
-=== Install shairport-sync (optional) ===
+=== Install shairport-sync ===
 echo "Installing shairport-sync..."
 sudo apt install -y autoconf automake libtool libdaemon-dev libasound2-dev libpopt-dev libconfig-dev avahi-daemon libavahi-client-dev libssl-dev libsoxr-dev
 cd /tmp
@@ -77,7 +69,6 @@ sudo systemctl daemon-reload
 
 === Enable services ===
 sudo systemctl enable pulseaudio
-sudo systemctl enable librespot
 sudo systemctl enable bridge-api
 sudo systemctl enable bt_autoreconnect
 

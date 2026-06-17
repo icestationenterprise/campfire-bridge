@@ -1,27 +1,10 @@
 /**
  * Bridge API integration tests.
- * All system commands (playerctl, bluetoothctl, librespot, party) are mocked
+ * All system commands (bluetoothctl, party, airplay) are mocked
  * so these run on any machine without real hardware.
  */
 
 import request from 'supertest';
-
-// ── Mock playerctl ────────────────────────────────────────────────────────────
-jest.mock('../src/playerctl', () => ({
-  play:       jest.fn().mockResolvedValue(undefined),
-  pause:      jest.fn().mockResolvedValue(undefined),
-  next:       jest.fn().mockResolvedValue(undefined),
-  previous:   jest.fn().mockResolvedValue(undefined),
-  seek:       jest.fn().mockResolvedValue(undefined),
-  setVolume:  jest.fn().mockResolvedValue(undefined),
-  isPlaying:  jest.fn().mockResolvedValue(false),
-  getVolume:  jest.fn().mockResolvedValue(50),
-  getPosition: jest.fn().mockResolvedValue(0),
-  getTrack:   jest.fn().mockResolvedValue({
-    title: 'Test Song', artist: 'Test Artist',
-    position_ms: 0, duration_ms: 180000,
-  }),
-}));
 
 // ── Mock bluetooth ────────────────────────────────────────────────────────────
 jest.mock('../src/bluetooth', () => ({
@@ -39,15 +22,6 @@ jest.mock('../src/bluetooth', () => ({
   ]),
 }));
 
-// ── Mock librespot ────────────────────────────────────────────────────────────
-jest.mock('../src/librespot', () => ({
-  LibrespotManager: jest.fn().mockImplementation(() => ({
-    start:     jest.fn(),
-    stop:      jest.fn(),
-    isRunning: jest.fn().mockReturnValue(true),
-  })),
-}));
-
 // ── Mock party ────────────────────────────────────────────────────────────────
 jest.mock('../src/party', () => ({
   enablePartyMode:   jest.fn().mockResolvedValue(undefined),
@@ -58,7 +32,14 @@ jest.mock('../src/party', () => ({
   setGroupVolume:    jest.fn().mockResolvedValue(undefined),
   shiftGroupVolume:  jest.fn().mockResolvedValue(undefined),
   setGroupMuted:     jest.fn().mockResolvedValue(undefined),
+  setDefaultAudioSink: jest.fn().mockResolvedValue(undefined),
   getPartyStatus:    jest.fn().mockReturnValue({ active: false, speakers: [] }),
+}));
+
+// ── Mock airplay ──────────────────────────────────────────────────────────────
+jest.mock('../src/airplay', () => ({
+  startAirplay: jest.fn().mockResolvedValue(undefined),
+  stopAirplay:  jest.fn().mockResolvedValue(undefined),
 }));
 
 // ── Mock adapters ─────────────────────────────────────────────────────────────
@@ -74,9 +55,9 @@ jest.mock('../src/adapters', () => ({
 
 // Import AFTER mocks are set up
 import app from '../src/index';
-import * as playerctl from '../src/playerctl';
 import * as bluetooth from '../src/bluetooth';
 import * as party from '../src/party';
+import * as airplay from '../src/airplay';
 import * as adapters from '../src/adapters';
 
 // ── Status ────────────────────────────────────────────────────────────────────
@@ -86,113 +67,7 @@ describe('GET /api/status', () => {
     const res = await request(app).get('/api/status');
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('device');
-    expect(res.body).toHaveProperty('connected');
-    expect(res.body).toHaveProperty('playing');
-    expect(res.body).toHaveProperty('track');
-    expect(res.body).toHaveProperty('volume');
     expect(res.body).toHaveProperty('party');
-  });
-
-  it('track has required fields', async () => {
-    const res = await request(app).get('/api/status');
-    expect(res.body.track).toHaveProperty('title');
-    expect(res.body.track).toHaveProperty('artist');
-    expect(res.body.track).toHaveProperty('position_ms');
-    expect(res.body.track).toHaveProperty('duration_ms');
-  });
-});
-
-// ── Playback ──────────────────────────────────────────────────────────────────
-
-describe('POST /api/play', () => {
-  it('calls playerctl.play and sets playing=true', async () => {
-    const res = await request(app).post('/api/play');
-    expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
-    expect(res.body.status.playing).toBe(true);
-    expect(playerctl.play).toHaveBeenCalled();
-  });
-});
-
-describe('POST /api/pause', () => {
-  it('calls playerctl.pause and sets playing=false', async () => {
-    const res = await request(app).post('/api/pause');
-    expect(res.status).toBe(200);
-    expect(res.body.status.playing).toBe(false);
-    expect(playerctl.pause).toHaveBeenCalled();
-  });
-});
-
-describe('POST /api/next', () => {
-  it('calls playerctl.next', async () => {
-    const res = await request(app).post('/api/next');
-    expect(res.status).toBe(200);
-    expect(playerctl.next).toHaveBeenCalled();
-  });
-});
-
-describe('POST /api/previous', () => {
-  it('calls playerctl.previous', async () => {
-    const res = await request(app).post('/api/previous');
-    expect(res.status).toBe(200);
-    expect(playerctl.previous).toHaveBeenCalled();
-  });
-});
-
-describe('POST /api/seek', () => {
-  it('calls playerctl.seek with position_ms', async () => {
-    const res = await request(app).post('/api/seek').send({ position_ms: 30000 });
-    expect(res.status).toBe(200);
-    expect(res.body.status.track.position_ms).toBe(30000);
-    expect(playerctl.seek).toHaveBeenCalledWith(30000);
-  });
-
-  it('returns 400 when position_ms is missing', async () => {
-    const res = await request(app).post('/api/seek').send({});
-    expect(res.status).toBe(400);
-  });
-});
-
-describe('POST /api/volume', () => {
-  it('calls playerctl.setVolume and clamps to 0–100', async () => {
-    const res = await request(app).post('/api/volume').send({ volume: 75 });
-    expect(res.status).toBe(200);
-    expect(res.body.status.volume).toBe(75);
-    expect(playerctl.setVolume).toHaveBeenCalledWith(75);
-  });
-
-  it('clamps volume above 100 to 100', async () => {
-    const res = await request(app).post('/api/volume').send({ volume: 999 });
-    expect(res.body.status.volume).toBe(100);
-  });
-
-  it('clamps volume below 0 to 0', async () => {
-    const res = await request(app).post('/api/volume').send({ volume: -5 });
-    expect(res.body.status.volume).toBe(0);
-  });
-
-  it('returns 400 when volume is missing', async () => {
-    const res = await request(app).post('/api/volume').send({});
-    expect(res.status).toBe(400);
-  });
-});
-
-// ── Bridge connect/disconnect ─────────────────────────────────────────────────
-
-describe('POST /api/connect', () => {
-  it('returns 200 and sets connected=true', async () => {
-    const res = await request(app).post('/api/connect');
-    expect(res.status).toBe(200);
-    expect(res.body.status.connected).toBe(true);
-  });
-});
-
-describe('POST /api/disconnect', () => {
-  it('returns 200 and sets connected=false', async () => {
-    const res = await request(app).post('/api/disconnect');
-    expect(res.status).toBe(200);
-    expect(res.body.status.connected).toBe(false);
-    expect(res.body.status.playing).toBe(false);
   });
 });
 
@@ -278,28 +153,7 @@ describe('POST /api/bt/pair', () => {
   });
 });
 
-// ── Internal event hook ───────────────────────────────────────────────────────
-
-describe('POST /internal/event', () => {
-  it('playing event sets playing=true and updates track', async () => {
-    await request(app).post('/internal/event').send({
-      event: 'playing', name: 'New Song', artists: 'New Artist',
-      duration_ms: '240000', position_ms: '1000',
-    });
-    const res = await request(app).get('/api/status');
-    expect(res.body.playing).toBe(true);
-    expect(res.body.track.title).toBe('New Song');
-    expect(res.body.track.artist).toBe('New Artist');
-  });
-
-  it('paused event sets playing=false', async () => {
-    await request(app).post('/internal/event').send({ event: 'paused' });
-    const res = await request(app).get('/api/status');
-    expect(res.body.playing).toBe(false);
-  });
-});
-
-// ── Party mode ────────────────────────────────────────────────────────────────
+// ── Party mode + AirPlay ───────────────────────────────────────────────────────
 
 describe('GET /api/party', () => {
   it('returns party status', async () => {
@@ -311,7 +165,7 @@ describe('GET /api/party', () => {
 });
 
 describe('POST /api/party/enable', () => {
-  it('calls party.enablePartyMode with the given macs', async () => {
+  it('calls party.enablePartyMode and starts AirPlay', async () => {
     (party.getPartyStatus as jest.Mock).mockReturnValueOnce({
       active: true,
       speakers: [
@@ -328,6 +182,7 @@ describe('POST /api/party/enable', () => {
     expect(party.enablePartyMode).toHaveBeenCalledWith([
       'AA:BB:CC:DD:EE:01', 'AA:BB:CC:DD:EE:02',
     ]);
+    expect(airplay.startAirplay).toHaveBeenCalled();
   });
 
   it('returns 400 when macs is missing', async () => {
@@ -340,11 +195,12 @@ describe('POST /api/party/enable', () => {
 });
 
 describe('POST /api/party/disable', () => {
-  it('calls party.disablePartyMode and returns active=false', async () => {
+  it('stops AirPlay, calls party.disablePartyMode, and returns active=false', async () => {
     const res = await request(app).post('/api/party/disable');
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.party.active).toBe(false);
+    expect(airplay.stopAirplay).toHaveBeenCalled();
     expect(party.disablePartyMode).toHaveBeenCalled();
   });
 });

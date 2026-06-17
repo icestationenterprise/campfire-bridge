@@ -9,31 +9,21 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 step() { echo -e "\n${GREEN}▶ $1${NC}"; }
 
-step "1/9  Updating system packages"
+step "1/8  Updating system packages"
 sudo apt update && sudo apt upgrade -y
 
-step "2/9  Installing system dependencies"
+step "2/8  Installing system dependencies"
 sudo apt install -y \
   git curl \
   bluetooth bluez bluez-tools \
   pulseaudio pulseaudio-module-bluetooth \
-  playerctl \
   shairport-sync
 
-step "3/9  Installing Node.js 20"
+step "3/8  Installing Node.js 20"
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
-step "4/9  Installing librespot"
-# raspotify packages librespot for ARM — we install it then disable their service
-# since we manage the librespot process ourselves via the bridge.
-curl -sL https://dtcooper.github.io/raspotify/install.sh | sh || true
-sudo systemctl stop raspotify  2>/dev/null || true
-sudo systemctl disable raspotify 2>/dev/null || true
-# Verify the binary is in place
-librespot --version || { echo "ERROR: librespot not found after install"; exit 1; }
-
-step "5/9  Configuring Bluetooth"
+step "4/8  Configuring Bluetooth"
 # Always-on, always discoverable/pairable so speakers can connect
 sudo tee /etc/bluetooth/main.conf > /dev/null << 'EOF'
 [Policy]
@@ -47,7 +37,7 @@ sudo usermod -a -G bluetooth pi
 sudo systemctl enable bluetooth
 sudo systemctl restart bluetooth
 
-step "6/9  Configuring PulseAudio for Bluetooth"
+step "5/8  Configuring PulseAudio for Bluetooth"
 mkdir -p /home/pi/.config/pulse
 # Load Bluetooth modules on top of the default PulseAudio config
 tee /home/pi/.config/pulse/default.pa > /dev/null << 'EOF'
@@ -68,11 +58,11 @@ pa = {
 };
 EOF
 
-step "7/9  Enabling lingering user session (PulseAudio starts at boot)"
+step "6/8  Enabling lingering user session (PulseAudio starts at boot)"
 # Without this, user systemd services don't start until someone logs in.
 sudo loginctl enable-linger pi
 
-step "8/9  Cloning repo and building bridge"
+step "7/8  Cloning repo and building bridge"
 cd /home/pi
 if [ -d "campfire-bridge/.git" ]; then
   echo "Repo already exists — pulling latest"
@@ -85,7 +75,7 @@ cd bridge/api
 npm install
 npm run build
 
-step "9/9  Installing campfire-bridge as a user systemd service"
+step "8/8  Installing campfire-bridge as a user systemd service"
 # Running as a user service means it shares the pi user's PulseAudio session
 # automatically — no need to pass socket paths manually.
 mkdir -p /home/pi/.config/systemd/user

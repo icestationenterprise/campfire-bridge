@@ -19,9 +19,10 @@ paplay /usr/share/sounds/alsa/Front_Left.wav
 systemctl status bridge-api
 2. Check logs:
 journalctl -u bridge-api -f
-#### Spotify Connect Not Appearing
-1. Check librespot service
-systemctl status librespot
-2. Verify network connectivity
-3. Check Spotify credentials in environment variables
+#### AirPlay Device Not Appearing
+1. Check that party mode is active — AirPlay (shairport-sync) only runs while party mode is on
+systemctl --user status shairport-sync
+2. Verify the phone is on the same network as the bridge (or joined its hotspot in camping mode)
+3. Confirm campfire_party sink exists
+pactl list short sinks | grep campfire_party
 
