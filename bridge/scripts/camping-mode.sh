@@ -5,6 +5,8 @@
 # If none found: activates the Campfire hotspot (wlan0 in AP/shared mode).
 # While in hotspot mode: scans every 30 s; if a saved home network is
 # visible, tears down the hotspot and lets NM reconnect automatically.
+# Also polls /tmp/campfire-mode-request so POST /api/network/mode can
+# trigger a switch without needing sudo from the Bridge API process.
 #
 # Writes current mode ("home" or "camping") to /tmp/campfire-network-mode
 # so the Bridge API can surface it in GET /api/status.
@@ -12,9 +14,11 @@
 set -uo pipefail
 
 STATE_FILE=/tmp/campfire-network-mode
+REQUEST_FILE=/tmp/campfire-mode-request
 HOTSPOT_CON=campfire-hotspot
 BOOT_TIMEOUT=60   # seconds to wait at boot for home WiFi
-CHECK_INTERVAL=30 # seconds between scans while in hotspot mode
+CHECK_INTERVAL=30 # seconds between loop ticks
+RECONNECT_WAIT=45 # seconds to give NM to reconnect after hotspot is stopped
 
 write_state() { echo "$1" > "$STATE_FILE"; }
 
@@ -26,7 +30,7 @@ home_wifi_active() {
 }
 
 # True if any saved home WiFi SSID is visible in the current scan results.
-# Does NOT disconnect anyone — purely passive check.
+# Works even in AP mode on Pi's brcmfmac driver (background scan supported).
 home_wifi_in_range() {
   local visible
   visible=$(nmcli -t -f SSID dev wifi list 2>/dev/null | sort -u)
@@ -51,9 +55,34 @@ start_hotspot() {
 }
 
 stop_hotspot() {
-  echo "[camping-mode] Home WiFi in range — stopping hotspot"
+  echo "[camping-mode] Stopping hotspot, waiting ${RECONNECT_WAIT}s for home WiFi..."
   nmcli con down "$HOTSPOT_CON" 2>/dev/null || true
   write_state home
+  sleep "$RECONNECT_WAIT"
+  if home_wifi_active; then
+    echo "[camping-mode] Reconnected to home WiFi"
+  else
+    echo "[camping-mode] Home WiFi did not connect — restarting hotspot"
+    start_hotspot
+  fi
+}
+
+# Called each loop tick. If the Bridge API wrote a mode request, act on it.
+handle_api_request() {
+  [ -f "$REQUEST_FILE" ] || return
+  local requested
+  requested=$(cat "$REQUEST_FILE" 2>/dev/null | tr -d '[:space:]')
+  rm -f "$REQUEST_FILE"
+  local current
+  current=$(cat "$STATE_FILE" 2>/dev/null || echo home)
+
+  if [ "$requested" = "home" ] && [ "$current" = "camping" ]; then
+    echo "[camping-mode] API requested home mode"
+    stop_hotspot
+  elif [ "$requested" = "camping" ] && [ "$current" = "home" ]; then
+    echo "[camping-mode] API requested camping mode"
+    start_hotspot
+  fi
 }
 
 # ── Boot: wait for home WiFi ──────────────────────────────────────────────────
@@ -77,13 +106,12 @@ home_wifi_active || start_hotspot
 
 while true; do
   sleep "$CHECK_INTERVAL"
+  handle_api_request
   mode=$(cat "$STATE_FILE" 2>/dev/null || echo home)
 
   if [ "$mode" = "camping" ]; then
     if home_wifi_in_range; then
       stop_hotspot
-      sleep 15  # give NM time to auto-connect
-      home_wifi_active || start_hotspot  # re-activate if auto-connect failed
     fi
   else
     if ! home_wifi_active; then
