@@ -3,9 +3,8 @@
 A full-stack system for uninterrupted music playback on Bluetooth speakers via a Raspberry Pi bridge device.
 
 ## 🏗️ Architecture
-[Mobile App] ←→ [Bridge API] ←→ [librespot] → [Bluetooth Speaker]
-↓
-[PulseAudio] ←→ [AirPlay/Shairport]
+[Mobile App] —AirPlay/Cast (audio)→ [shairport-sync] ←→ [PulseAudio party sink] → [Built-in + Bluetooth Speakers]
+[Mobile App] —HTTP (setup/control)→ [Bridge API] → manages BT pairing, party mode, AirPlay on/off
 
 ## 📦 Repository Structure
 
@@ -29,10 +28,10 @@ npm install
 npx react-native run-ios # or run-android
 
 ##📱 Features
-Spotify Connect integration via librespot
-AirPlay support (iOS)
-Cast support (Android)
-Samsung Separate App Sound assist
+AirPlay support (iOS) — stream from any app, no Spotify dependency
+Cast support (Android, planned)
+Multi-speaker party mode with latency-synced playback
+Multi-adapter Bluetooth routing (one dongle per speaker)
 Device discovery via mDNS
 Secure JWT authentication
 Real-time status via WebSocket

@@ -12,7 +12,7 @@ Limited access to system audio settings from apps
 DRM and Service Compliance
 No decryption or forwarding of DRM-protected content
 All streaming must comply with service Terms of Service
-Bridge presents as official Spotify Connect device via librespot
+Bridge has no dependency on or integration with any specific music service — it is a generic AirPlay/Cast audio receiver
 Hardware Limitations
 Requires Raspberry Pi 3B+ or newer for reliable Bluetooth
 Bluetooth range and quality may vary by speaker

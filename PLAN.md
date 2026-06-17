@@ -84,6 +84,20 @@ Multiple scenarios are supported from day one:
 
 ---
 
+## Standard Operating Procedure (Dev Sessions)
+
+### Building the Bridge API
+
+To build and restart the Bridge API, run the following **directly in terminal 4** (already SSH'd into the Pi):
+
+```bash
+cd ~/campfire-bridge/bridge/api && npm run build && sudo systemctl restart campfire-bridge
+```
+
+> Previously this was done by SSH-ing from a separate terminal (terminal 2). Terminal 4 is already on the Pi — use it directly.
+
+---
+
 ## Current State (What Exists)
 
 | Component | Status | Notes |
