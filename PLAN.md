@@ -86,15 +86,26 @@ Multiple scenarios are supported from day one:
 
 ## Standard Operating Procedure (Dev Sessions)
 
-### Building the Bridge API
+### Deploying bridge changes to the Pi
 
-To build and restart the Bridge API, run the following **directly in terminal 4** (already SSH'd into the Pi):
-
+**Terminal 3 — rsync from Mac to Pi**
 ```bash
-cd ~/campfire-bridge/bridge/api && npm run build && sudo systemctl restart campfire-bridge
+rsync -avz --exclude 'node_modules' --exclude 'dist' \
+  /Users/icestation/Projects/campfire-bridge/bridge/ \
+  pi@campfire-bridge.local:/home/pi/campfire-bridge/bridge/
 ```
 
-> Previously this was done by SSH-ing from a separate terminal (terminal 2). Terminal 4 is already on the Pi — use it directly.
+**Terminal 2 — remote build (one-off, no interactive session needed)**
+```bash
+ssh pi@campfire-bridge.local "cd ~/campfire-bridge/bridge/api && npm install && npm run build"
+```
+
+**Terminal 4 — already SSH'd in: restart bridge API**
+```bash
+systemctl --user restart campfire-bridge
+```
+
+> Git push to GitHub is separate from Pi deployment. rsync pushes code directly; git is for version history. Push to GitHub once a task is confirmed working on the Pi.
 
 ---
 
@@ -102,15 +113,17 @@ cd ~/campfire-bridge/bridge/api && npm run build && sudo systemctl restart campf
 
 | Component | Status | Notes |
 |---|---|---|
-| shairport-sync (AirPlay 2) | ✅ Done | Keep as-is |
-| PulseAudio + BT stack | ✅ Done | Keep |
+| shairport-sync (AirPlay 2) | ✅ Done | Runs as user service; starts/stops with party mode |
+| PulseAudio + BT stack | ✅ Done | multi-adapter, A2DP auto-recovery on restart |
 | Bluetooth scripts (bt_connect, bt_pair, etc.) | ✅ Done | Keep |
-| Bridge API skeleton (Express/TS) | 🔶 Partial | Refocus: remove playback routes, keep BT mgmt routes |
-| React Native app (iOS) | 🔶 Functional | Needs account, setup wizard, device mgmt, ownership flows |
-| Mock bridge server | ✅ Done | Update to match new API shape |
-| mDNS discovery | ✅ Done | Keep; ensure it advertises device serial |
-| librespot | ✅ Done | **Remove entirely** |
-| SpotifyContext / spotifyAuth | ✅ Done | **Remove** (no longer needed) |
+| Bridge API (Express/TS) | ✅ Done | BT mgmt + party mode routes; playback routes removed; `network_mode` in `/api/status` |
+| librespot | ✅ Removed | Deleted — no longer in codebase |
+| SpotifyContext / spotifyAuth | ✅ Removed | Deleted from app |
+| React Native app (iOS) | 🔶 Functional | Spotify removed; online/offline mode toggle; auto URL fallback (3-failure → switch); needs account, setup wizard, device mgmt, ownership |
+| Mock bridge server | ✅ Done | Updated to match current API shape |
+| mDNS / avahi | ✅ Done | Advertises AirPlay; needs device serial in TXT record |
+| camping-mode daemon | 🔶 Partial | `camping-mode.sh` + NM hotspot profile done; auto-switches home↔camping; SSID is "Campfire" (not serial-suffixed yet — needs #10); LED/button not done |
+| App auto URL detection | ✅ Done | After 3 failures on primary URL, tries fallback; auto-switches mode on success |
 
 ---
 
@@ -425,8 +438,8 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 
 - [ ] **#1 — Start FCC certification** — Contact a certified test lab (NTS, SGS, UL). Submit application. Runs 6–12 weeks externally. Blocks US sales. Kick this off before writing any code.
 - [ ] **#2 — Form LLC** — Must happen before taking any money. Online filing in most states, same-day possible.
-- [ ] **#3 — Remove librespot from bridge** *(⚡ quickest win)* — Delete librespot systemd service, `bridge/config/librespot.env`, `bridge/systemd/librespot.service`, librespot API routes. ~30 min.
-- [ ] **#4 — Remove Spotify code from app** *(⚡ quickest win)* — Delete `SpotifyContext.tsx`, `SpotifyLoginScreen.tsx`, `spotifyAuth.ts`, `spotifyClientId` from SettingsContext, Music tab Spotify UI. ~30 min.
+- [x] **#3 — Remove librespot from bridge** *(⚡ quickest win)* — Delete librespot systemd service, `bridge/config/librespot.env`, `bridge/systemd/librespot.service`, librespot API routes. ~30 min.
+- [x] **#4 — Remove Spotify code from app** *(⚡ quickest win)* — Delete `SpotifyContext.tsx`, `SpotifyLoginScreen.tsx`, `spotifyAuth.ts`, `spotifyClientId` from SettingsContext, Music tab Spotify UI. ~30 min.
 - [ ] **#5 — Infrastructure setup** — Register domain, set up Railway or Fly.io project, Cloudflare DNS + SSL, R2 bucket for firmware storage. Foundation for backend deployment.
 - [ ] **#6 — Backend: DB schema + project setup** — Initialize Node/TS project, write migrations for all 6 tables (`users`, `devices`, `device_access`, `transfer_tokens`, `gift_codes`, `firmware_releases`), connect to managed Postgres.
 - [ ] **#7 — Backend: Auth service** — `POST /auth/register`, `/auth/login`, `/auth/forgot-password`, `/auth/reset-password` + JWT middleware. Gate for device registry and all app account flows. *(🎯 most critical — start here after infra)*
@@ -436,7 +449,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 - [ ] **#11 — Device firmware: BLE provisioning service** — Device advertises `CampfireBridge` BLE service UUID when unconfigured; characteristic accepts encrypted WiFi SSID + password; reboots into home mode on receipt. Gate for app setup wizard.
 - [ ] **#12 — App: Account screens** — Sign up, log in, forgot/reset password. Requires auth service (#7) to be running.
 - [ ] **#13 — App: Device setup wizard** — BLE scan → send WiFi credentials → claim serial via `POST /devices/claim` → mDNS confirm. Requires BLE provisioning (#11) + account screens (#12) + device registry (#8). This is the critical first-user flow.
-- [ ] **#14 — Device firmware: Hotspot/camping mode** — Systemd service monitors for known WiFi networks; falls back to AP mode after 60s; hotspot SSID `Campfire-<last4serial>`; LED states; physical button toggle.
+- [~] **#14 — Device firmware: Hotspot/camping mode** — Systemd service monitors for known WiFi networks; falls back to AP mode after 60s; hotspot SSID `Campfire-<last4serial>`; LED states; physical button toggle. *(camping-mode.sh + NM hotspot profile done; SSID is "Campfire" until device identity #10 is done; LED/button pending)*
 - [ ] **#15 — Backend: Cloud WebSocket relay** — Device connects on boot and maintains persistent connection; app falls back to relay when not on LAN; relay routes commands + status only (never audio). Requires device identity (#10) for device authentication.
 - [ ] **#16 — Device firmware: Multi-dongle audio management** — PulseAudio config enumerates each USB BT dongle as a named sink; slot↔speaker MAC mapping persisted to `/etc/campfire/slots.json`; auto-reconnect each slot on boot.
 - [ ] **#17 — Device firmware: Bridge API routes (device management)** — `GET /api/status`, `GET /api/bt/slots`, `POST /api/bt/pair`, `POST /api/bt/connect`, `POST /api/bt/disconnect`, `POST /api/network/mode`, `GET /api/update/status`. Requires multi-dongle setup (#16).
