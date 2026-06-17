@@ -11,14 +11,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type AppMode = 'online' | 'offline';
+export type AppMode = 'home' | 'camping';
 
 export type Settings = {
-  /** URL used in Online mode (Tailscale IP — home or remote, needs internet) */
-  onlineUrl: string;
-  /** URL used in Offline mode (Campfire hotspot — camping, no internet needed) */
-  offlineUrl: string;
-  /** online = reach the bridge over Tailscale; offline = reach it via its own hotspot */
+  /** URL used in Home mode — mDNS on the local network, no internet needed */
+  homeUrl: string;
+  /** URL used in Camping mode — Pi's own hotspot, direct connection */
+  campingUrl: string;
+  /** home = same WiFi as the bridge; camping = connected to bridge's hotspot */
   mode: AppMode;
 };
 
@@ -32,9 +32,9 @@ type SettingsContextType = Settings & {
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
 const DEFAULTS: Settings = {
-  onlineUrl:  'http://100.102.229.11:3000',
-  offlineUrl: 'http://192.168.4.1:3000',
-  mode:       'online',
+  homeUrl:    'http://campfire-bridge.local:3000',
+  campingUrl: 'http://192.168.4.1:3000',
+  mode:       'home',
 };
 
 const STORAGE_KEY = '@campfire_settings';
@@ -52,12 +52,26 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.getItem(STORAGE_KEY)
       .then(raw => {
         if (raw) {
-          const parsed = JSON.parse(raw) as Partial<Settings> & { bridgeUrl?: string };
-          // Migrate old single bridgeUrl → onlineUrl
-          if (parsed.bridgeUrl && !parsed.onlineUrl) {
-            parsed.onlineUrl = parsed.bridgeUrl;
+          const parsed = JSON.parse(raw) as Partial<Omit<Settings, 'mode'>> & {
+            bridgeUrl?: string;
+            onlineUrl?: string;
+            offlineUrl?: string;
+            mode?: string;
+          };
+
+          // Migrate: bridgeUrl / onlineUrl → homeUrl
+          if (!parsed.homeUrl) {
+            parsed.homeUrl = parsed.onlineUrl ?? parsed.bridgeUrl;
           }
-          const merged = { ...DEFAULTS, ...parsed };
+          // Migrate: offlineUrl → campingUrl
+          if (!parsed.campingUrl && parsed.offlineUrl) {
+            parsed.campingUrl = parsed.offlineUrl;
+          }
+          // Migrate: mode 'online'→'home', 'offline'→'camping'
+          if (parsed.mode === 'online')  parsed.mode = 'home';
+          if (parsed.mode === 'offline') parsed.mode = 'camping';
+
+          const merged = { ...DEFAULTS, ...parsed } as Settings;
           settingsRef.current = merged;
           setSettings(merged);
         }
@@ -79,7 +93,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<SettingsContextType>(
     () => ({
       ...settings,
-      bridgeUrl: settings.mode === 'online' ? settings.onlineUrl : settings.offlineUrl,
+      bridgeUrl: settings.mode === 'home' ? settings.homeUrl : settings.campingUrl,
       setSetting,
       isLoaded,
     }),

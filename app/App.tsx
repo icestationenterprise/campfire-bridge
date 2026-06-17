@@ -49,9 +49,9 @@ function AppTabs() {
 // ── Context bridge: reads settings and injects into child providers ───────────
 
 function AppWithContexts() {
-  const { bridgeUrl, onlineUrl, offlineUrl, mode, setSetting } = useSettings();
-  const fallbackUrl  = mode === 'online' ? offlineUrl : onlineUrl;
-  const fallbackMode = mode === 'online' ? 'offline' : 'online';
+  const { bridgeUrl, homeUrl, campingUrl, mode, setSetting } = useSettings();
+  const fallbackUrl  = mode === 'home' ? campingUrl : homeUrl;
+  const fallbackMode = mode === 'home' ? 'camping' : 'home';
 
   return (
     <BridgeProvider

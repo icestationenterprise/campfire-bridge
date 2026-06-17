@@ -16,17 +16,17 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useSettings } from '../context/SettingsContext';
 
 export default function SettingsScreen() {
-  const { onlineUrl, offlineUrl, mode, setSetting } = useSettings();
+  const { homeUrl, campingUrl, mode, setSetting } = useSettings();
 
-  const [onlineDraft,  setOnlineDraft]  = useState(onlineUrl);
-  const [offlineDraft, setOfflineDraft] = useState(offlineUrl);
+  const [homeDraft,    setHomeDraft]    = useState(homeUrl);
+  const [campingDraft, setCampingDraft] = useState(campingUrl);
   const [saved,        setSaved]        = useState(false);
 
-  const handleModeChange = async (next: 'online' | 'offline') => {
+  const handleModeChange = async (next: 'home' | 'camping') => {
     await setSetting('mode', next);
-    if (next === 'offline') {
+    if (next === 'camping') {
       Alert.alert(
-        'Switch to Offline Mode',
+        'Switch to Camping Mode',
         'Connect your phone to the "Campfire" WiFi network (password: campfire123), then the app will reach the bridge automatically.',
         [
           { text: 'Open WiFi Settings', onPress: () => Linking.openURL('App-Prefs:root=WIFI') },
@@ -37,8 +37,8 @@ export default function SettingsScreen() {
   };
 
   const handleSave = async () => {
-    await setSetting('onlineUrl',  onlineDraft.trim());
-    await setSetting('offlineUrl', offlineDraft.trim());
+    await setSetting('homeUrl',    homeDraft.trim());
+    await setSetting('campingUrl', campingDraft.trim());
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -53,31 +53,31 @@ export default function SettingsScreen() {
           <View style={styles.card}>
             <View style={styles.modeRow}>
               <Pressable
-                style={[styles.modeBtn, mode === 'online' && styles.modeBtnActive]}
-                onPress={() => handleModeChange('online')}
+                style={[styles.modeBtn, mode === 'home' && styles.modeBtnActive]}
+                onPress={() => handleModeChange('home')}
               >
-                <Icon name="wifi" size={18} color={mode === 'online' ? '#fff' : '#777'} />
-                <Text style={[styles.modeBtnText, mode === 'online' && styles.modeBtnTextActive]}>Online</Text>
+                <Icon name="home" size={18} color={mode === 'home' ? '#fff' : '#777'} />
+                <Text style={[styles.modeBtnText, mode === 'home' && styles.modeBtnTextActive]}>Home</Text>
               </Pressable>
               <Pressable
-                style={[styles.modeBtn, mode === 'offline' && styles.modeBtnActive]}
-                onPress={() => handleModeChange('offline')}
+                style={[styles.modeBtn, mode === 'camping' && styles.modeBtnActive]}
+                onPress={() => handleModeChange('camping')}
               >
-                <Icon name="bluetooth" size={18} color={mode === 'offline' ? '#fff' : '#777'} />
-                <Text style={[styles.modeBtnText, mode === 'offline' && styles.modeBtnTextActive]}>Offline</Text>
+                <Icon name="terrain" size={18} color={mode === 'camping' ? '#fff' : '#777'} />
+                <Text style={[styles.modeBtnText, mode === 'camping' && styles.modeBtnTextActive]}>Camping</Text>
               </Pressable>
             </View>
             <Text style={styles.hint}>
-              {mode === 'online'
-                ? 'Reach the bridge over Tailscale — works at home or anywhere with internet.'
-                : 'Reach the bridge directly over its own WiFi hotspot — no internet needed (camping mode).'}
+              {mode === 'home'
+                ? 'Bridge on the same WiFi network — reaches it directly, no internet needed.'
+                : 'Bridge is creating its own WiFi hotspot — connect your phone to "Campfire".'}
             </Text>
           </View>
 
-          {/* ── Offline instructions ──────────────────────────────── */}
-          {mode === 'offline' && (
+          {/* ── Camping instructions ──────────────────────────────── */}
+          {mode === 'camping' && (
             <View style={styles.instructionCard}>
-              <Text style={styles.instructionTitle}>Offline setup</Text>
+              <Text style={styles.instructionTitle}>Camping setup</Text>
               <Text style={styles.instructionStep}>1. Connect this phone to <Text style={styles.bold}>"Campfire"</Text> WiFi (pw: campfire123)</Text>
               <Text style={styles.instructionStep}>2. Enable Party mode in the Connections tab</Text>
               <Text style={styles.instructionStep}>3. AirPlay music from any app to <Text style={styles.bold}>"Campfire Bridge"</Text></Text>
@@ -91,22 +91,22 @@ export default function SettingsScreen() {
           {/* ── Bridge URLs ───────────────────────────────────────── */}
           <Text style={styles.sectionHeader}>Bridge</Text>
           <View style={styles.card}>
-            <Text style={styles.label}>Online URL <Text style={styles.labelSub}>(Tailscale)</Text></Text>
+            <Text style={styles.label}>Home URL <Text style={styles.labelSub}>(local network)</Text></Text>
             <TextInput
-              style={[styles.input, mode === 'online' && styles.inputActive]}
-              value={onlineDraft}
-              onChangeText={setOnlineDraft}
-              placeholder="http://100.x.x.x:3000"
+              style={[styles.input, mode === 'home' && styles.inputActive]}
+              value={homeDraft}
+              onChangeText={setHomeDraft}
+              placeholder="http://campfire-bridge.local:3000"
               placeholderTextColor="#555"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
             />
-            <Text style={styles.label}>Offline URL <Text style={styles.labelSub}>(Campfire hotspot)</Text></Text>
+            <Text style={styles.label}>Camping URL <Text style={styles.labelSub}>(Campfire hotspot)</Text></Text>
             <TextInput
-              style={[styles.input, mode === 'offline' && styles.inputActive]}
-              value={offlineDraft}
-              onChangeText={setOfflineDraft}
+              style={[styles.input, mode === 'camping' && styles.inputActive]}
+              value={campingDraft}
+              onChangeText={setCampingDraft}
               placeholder="http://192.168.4.1:3000"
               placeholderTextColor="#555"
               autoCapitalize="none"
