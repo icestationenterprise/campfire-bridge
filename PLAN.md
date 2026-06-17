@@ -119,10 +119,10 @@ systemctl --user restart campfire-bridge
 | Bridge API (Express/TS) | ✅ Done | BT mgmt + party mode routes; playback routes removed; `network_mode` in `/api/status` |
 | librespot | ✅ Removed | Deleted — no longer in codebase |
 | SpotifyContext / spotifyAuth | ✅ Removed | Deleted from app |
-| React Native app (iOS) | 🔶 Functional | Spotify removed; online/offline mode toggle; auto URL fallback (3-failure → switch); needs account, setup wizard, device mgmt, ownership |
+| React Native app (iOS) | 🔶 Functional | Spotify removed; Home/Camping mode toggle; default Home URL = `http://campfire-bridge.local:3000`; Tailscale removed; auto URL fallback (3-failure → switch mode); migration for old AsyncStorage keys; needs account, setup wizard, device mgmt, ownership |
 | Mock bridge server | ✅ Done | Updated to match current API shape |
 | mDNS / avahi | ✅ Done | Advertises AirPlay; needs device serial in TXT record |
-| camping-mode daemon | 🔶 Partial | `camping-mode.sh` + NM hotspot profile done; auto-switches home↔camping; SSID is "Campfire" (not serial-suffixed yet — needs #10); LED/button not done |
+| camping-mode daemon | 🔶 Partial | `camping-mode.sh` + NM hotspot profile done; auto-switches home↔camping; oscillation bug fixed (45s reconnect wait); `POST /api/network/mode` endpoint done; `network_mode` in `/api/status`; SSID is "Campfire" (not serial-suffixed yet — needs #10); LED/button not done |
 | App auto URL detection | ✅ Done | After 3 failures on primary URL, tries fallback; auto-switches mode on success |
 
 ---
