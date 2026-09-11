@@ -8,7 +8,7 @@
 
 ## Product Overview
 
-A self-contained wireless speaker product with an embedded Linux board, multiple Bluetooth USB dongles, and an amplifier/DAC built into one enclosure. The device receives audio streamed from a phone via AirPlay (iOS) or Cast (Android) and outputs simultaneously to its built-in speaker and up to 1 or 4 paired external Bluetooth speakers. No cloud account required for playback — the device works on a local network or its own hotspot. Controlled through the Campfire app.
+A self-contained wireless speaker product with an embedded Linux board, multiple Bluetooth USB dongles, and an amplifier/DAC built into one enclosure. The device receives audio streamed from a phone via AirPlay (iOS) or Cast (Android) and outputs simultaneously to its built-in speaker and up to 1 or 3 paired external Bluetooth speakers. No cloud account required for playback — the device works on a local network or its own hotspot. Controlled through the Campfire app.
 
 ---
 
@@ -17,7 +17,7 @@ A self-contained wireless speaker product with an embedded Linux board, multiple
 | SKU | External BT USB Dongles | Total Output Channels |
 |---|---|---|
 | **Limited** | 1 | Built-in speaker + 1 external BT speaker |
-| **Extended** | 4 | Built-in speaker + 4 external BT speakers |
+| **Extended** | 3 | Built-in speaker + 3 external BT speakers |
 
 The Pi's built-in Bluetooth adapter is **disabled and unused**. All speaker outputs run through the external USB dongles exclusively.
 
@@ -336,15 +336,37 @@ firmware_releases (
 
 ## Phase 2 — Hardware Finalization (run in parallel, 8–16 weeks)
 
+### Hardware Characterization (must precede BOM finalization)
+
+The Pi 5 dev rig is known-good but over-specified. Before committing to a BOM,
+measure what the workload actually needs. Harness lives in `bridge/diagnostics/`
+(see its `README.md` for the method and `EXPERIMENTS.md` for the per-component tests).
+
+Key constraint driving the whole exercise: **the audio path is single-threaded**.
+PulseAudio's null-sink → N × loopback → N × SBC encode chain runs in one thread,
+so the SoC is chosen on single-thread performance, not core count. A cheaper board
+with more, slower cores is worse, not better.
+
+- [ ] Baseline capture on Pi 5 — Extended SKU worst case (3 BT + wired), camping mode, idle
+- [ ] Constraint sweep — find the clock/core/quota knee where audio breaks
+- [ ] `dsp_bench` score on Pi 5 as the cross-board comparison baseline
+- [ ] E1 — I²S amp (MAX98357A) replacing USB audio adapter + PAM8403
+- [ ] E2 — speakers-per-dongle limit (may cut Extended from 3 dongles to 2)
+- [ ] E3 — RAM floor · E4 — storage size + writes/day · E6 — peak current draw
+- [ ] E5 — WiFi/BT coexistence in camping mode (gate, not an optimization)
+- [ ] E7 — boot time to first AirPlay availability (gate, target < 45 s)
+- [ ] Acceptance run on 1–2 candidate boards before committing to volume
+
 ### Bill of Materials
 
 | Component | Limited SKU | Extended SKU | Notes |
 |---|---|---|---|
 | SBC | Pi 5 (dev) or CM4 (production) | same | CM4 preferred for production — smaller, more reliable |
-| External USB BT dongles | 1 | 4 | Must be confirmed compatible with PulseAudio BT sink |
-| Powered USB hub | Not needed | Yes | Required for 4 dongles under load |
-| DAC / amplifier board | Yes | Yes | Drives built-in speaker |
-| Built-in speaker driver | Yes | Yes | Mounted in enclosure |
+| External USB BT dongles | 1 | 3 | Must be confirmed compatible with PulseAudio BT sink |
+| USB audio adapter | 1 | 1 | UAC1 class-compliant (e.g. Sabrent AU-EMAC); drives built-in speaker via amp board |
+| Class D amp board | Yes | Yes | PAM8403 (2×3W, 5V); between USB audio adapter line out and speaker driver |
+| Built-in speaker driver | Yes | Yes | 4Ω 3W full-range, ~2–3" (e.g. Adafruit #1314); mounted in enclosure |
+| Powered USB hub | Not needed | Not needed | Pi 5 has 4 USB ports; 3 BT dongles + 1 USB audio adapter = 4 exactly |
 | Power supply | Sized for load | Sized for load | Extended needs more headroom |
 | RGB status LED | Yes | Yes | Provisioning / home / camping / error states |
 | Physical button | Yes | Yes | Short: camping toggle. Long: factory reset |
@@ -463,7 +485,8 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 - [ ] **#25 — App: Android support** — Wire BLE provisioning flow on Android (react-native-ble-manager already installed) + Cast SDK integration. Requires BLE provisioning firmware (#11).
 - [ ] **#26 — App: iOS App Store submission** — Requires privacy policy (#9) + CI/CD (#24) + account screens (#12) + setup wizard (#13) + TestFlight beta pass.
 - [ ] **#27 — App: Android Google Play submission** — Requires Android support (#25) + privacy policy (#9) + CI/CD (#24).
-- [ ] **#28 — Hardware: BOM finalization** — Confirm all components (SBC, dongles, USB hub, DAC/amp, speaker, PSU, LED, button, enclosure) for both SKUs with suppliers and quantities. Runs in parallel with all software work.
+- [ ] **#27a — Hardware: Characterization & cost-down testing** — Run the `bridge/diagnostics/` harness on the Pi 5 to measure actual CPU (busiest-core, not total), RAM, storage-write, power and thermal requirements; sweep constraints to find the failure knee; run the per-component experiments in `EXPERIMENTS.md` (I²S amp, dongle count, RAM floor, storage, coexistence, power, boot time). Produces the measured spec that #28 buys against. No software prerequisites — can start now, in parallel with everything else.
+- [ ] **#28 — Hardware: BOM finalization** — Confirm all components (SBC, dongles, USB hub, DAC/amp, speaker, PSU, LED, button, enclosure) for both SKUs with suppliers and quantities. Requires characterization results (#27a) — do not commit to suppliers before the measured spec exists. Runs in parallel with all software work.
 - [ ] **#29 — Hardware: Factory provisioning jig + process** — Serial number generation script (batch by SKU), cert generation + flash script, firmware image, label printing. Requires device identity spec (#10) + BOM finalized (#28).
 - [ ] **#30 — E-commerce: Shopify store** — Limited + Extended SKU listings, payment processing, shipping. Requires LLC (#2).
 - [ ] **#31 — E-commerce: Serial number assignment workflow** — Map order fulfillment → assign serial from pre-loaded pool → print label. Requires device registry (#8) + provisioning jig (#29).
