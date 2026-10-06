@@ -500,6 +500,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 
 | # | Issue | Impact | Status |
 |---|---|---|---|
+| 0 | **Bridge API writes ~4.8 MB/s to the SD card continuously** (`node`, measured 2026-10-06). ~396 GB/day — will wear out SD/eMMC within a year in the field, and affects every unit shipped. Not journald; attributed to our own process. | **High — field reliability, blocks storage sizing in #28** | Open — find and fix the writer in `bridge/api/` |
 | 1 | **Android offline/camping**: Cast SDK requires internet for session establishment. Android users cannot use Cast in camping mode (no internet). | Medium — Android camping users only | Evaluating: UPnP/DLNA as offline Android fallback |
 | 2 | **FCC certification timeline**: ~6–12 weeks and must be done before US sales. | High — hard blocker for launch | Not started — start immediately |
 | 3 | **Remote relay + camping conflict**: Cloud relay requires internet. When device is in camping mode, relay is unavailable — this is expected and correct behavior. App must gracefully handle relay-unavailable state and prompt user to join device hotspot. | Low — expected behavior, needs UX handling | UX design needed |
