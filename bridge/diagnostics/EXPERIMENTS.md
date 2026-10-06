@@ -189,11 +189,12 @@ It spreads across processes, so multi-core budget SoCs stay on the shortlist.
 
 ### Read the baseline with these two caveats
 
-1. **Every number above is inflated by the ~4 MB/s background writer (E4).** It is
-   present in all 25 runs, including idle, and it costs CPU as well as endurance.
-   If it turns out to be a logging bug, the real audio-path requirement is *lower*
-   than 1200–1400 MHz A76-equivalent — possibly enough to change the SoC answer.
-   **#28 should not be finalized until E4's writer is attributed.**
+1. **A background writer may be inflating every number above (E4).** `capture.py`
+   reports disk writes in all 25 runs including idle; a later `vmstat` cross-check
+   in a different state disagreed by ~4× and the discrepancy is unresolved. If it
+   is a bug rather than real work, the audio-path requirement is *lower* than
+   1200–1400 MHz A76-equivalent — possibly enough to change the SoC answer.
+   **#28 should not be finalized until E4 is reconciled.**
 2. **There is no idle control at the constrained configs.** At 4 cores / 2400 MHz,
    `idle-connected` costs 24.3% busiest-core and full Extended load costs 25.7% —
    a **1.4-point** marginal cost for streaming to 3 BT speakers + wired. So the
@@ -255,7 +256,7 @@ Fill this in as you go. This is what you take to suppliers.
 | E1 | I²S amp replaces USB adapter + PAM8403 | Not run — blocked on setting `BUILTIN_SINK_NAME` on the Pi | $4–7 | open | — |
 | E2 | Dongles needed for 3 speakers | **Not validly run.** The only capture (`2bt-wired`) is **46 s** against a 300 s protocol for an intermittent fault, and records sink MACs but not which adapter each used. The audible 2-on-1-dongle chopping remains an uncontrolled observation | $0–16 | **Do not cut dongle count — one per speaker.** Re-run at 300 s, logging adapter per sink | 2026-09-20 |
 | E3 | RAM floor | Peak **541 MB** across 25 runs (max of any run; idle 528 MB). Constrained 1024/512 MB boot runs still not done | $3–10 | **1 GB tier**; 512 MB too tight once OTA downloads an image | 2026-10-05 |
-| E4 | Storage size + writes/day | **FAIL — and probably a bug, not a requirement.** Sustained **~4.2 MB/s** of writes → **~347 GB/day, ~126 TB/year**. That is **~347×** the <1 GB/day this experiment assumed. Load-independent: idle-with-nothing-playing writes as much as 3 BT + wired streaming (4315 vs 4293 KB/s). Each run's nonzero samples are integer multiples of that run's own base rate, i.e. a steady writer batched by writeback — not a measurement artifact. `disk_written_bytes()` is correct (`/proc/diskstats` field 9 × 512, differenced), and the same code path yields sane network numbers (89 KB/s AirPlay in, 1 KB/s idle) | $2–5 | **BLOCKED — attribute the writer before choosing storage.** Do not size storage to this number | 2026-10-06 |
+| E4 | Storage size + writes/day | **UNRESOLVED — two measurements disagree ~4×; do not quote a number yet.** `capture.py` reports a steady **~4.2 MB/s** across all 25 runs (→ ~347 GB/day), load-independent and present at `idle-connected`. A `vmstat 5` cross-check on 2026-10-06 instead showed `bo` at 13 and 10 KB/s with one 3197 KB/s spike (~1 MB/s avg). **The states differ:** the captures all had 3 BT sinks connected with loopbacks encoding; the vmstat run had none, so it may simply measure a quieter machine rather than contradict the captures. **journald is ruled out** — `journalctl --disk-usage` is 8M total. The `capture.py` math is sound (`/proc/diskstats` field 9 × 512, differenced; same code path gives sane network numbers; each run's nonzero samples are integer multiples of that run's own base rate). Still to check: whether more than one device name matches `(mmcblk\d|sd[a-z]|nvme\d+n\d+)` and is being double-counted, and per-process `/proc/*/io` attribution **with 3 speakers connected** to match the capture state | $2–5 | **BLOCKED — reconcile in matched state before choosing storage** | 2026-10-06 |
 | E5 | Camping-mode coexistence | **Inconclusive — the control does not match.** Camping ran 3 captures (181 s, 301 s, 300 s) with **3 underruns in one 300 s run**, 0 in the other two. Home control (`extended-3bt`) ran only 181 s × 2, 0 faults. Camping got 782 s of exposure vs home's 362 s, so more faults is partly just more looking. `hostapd` CPU reads 0.0 in every camping run, which is itself suspect for a run that is supposed to be hosting the AP | gate | open — re-run matched at 600 s each | 2026-10-05 |
 | E6 | Peak current draw | Not run — needs a ~$15 inline USB power meter | $2–6 | open | — |
 | E7 | Boot time | Not run | gate | open | — |
