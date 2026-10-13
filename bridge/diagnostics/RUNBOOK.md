@@ -227,6 +227,243 @@ Then work through `EXPERIMENTS.md` for the per-component cost-down tests.
 
 ---
 
+## Part 7 — The four remaining experiments, step by step
+
+As of 2026-10-12 these four are the open ones. 7A and 7B need nothing you do
+not already own. 7C needs two reboots. 7D needs a third Bluetooth speaker.
+
+Deploy the scripts first.
+
+**On your Mac:**
+```bash
+cd ~/Projects/campfire-bridge
+rsync -av bridge/diagnostics/ pi@campfire-bridge.local:/home/pi/campfire-bridge/bridge/diagnostics/
+```
+
+---
+
+### 7A — E4: what is writing to the SD card
+
+This closes Known Issue #0 and unblocks storage sizing in #28.
+
+**Step 1 — get the Pi into the state where the fault was seen.** The 4.8 MB/s
+was measured with speakers connected, so idle will not reproduce it. Open the
+Campfire app, connect both speakers, start the party, and AirPlay something that
+actually plays for the whole test. Leave it playing.
+
+**Step 2 — run the attribution script.**
+
+**On the Pi:**
+```bash
+cd ~/campfire-bridge/bridge/diagnostics
+sudo apt install -y fatrace
+sudo ./sd-write-attribute.sh
+```
+
+It takes about a minute. It prints three numbers that matter:
+
+| Number | Meaning |
+|---|---|
+| `wchar` | Bytes the API wrote via syscalls — **includes sockets**. A chatty HTTP API inflates this. Not storage. |
+| `write_bytes` | Bytes that actually reached the card. **This is the only number that wears it out.** |
+| Whole card | Every process, from `/proc/diskstats`. |
+
+**Step 3 — read the verdict.** There are only three outcomes:
+
+- **`write_bytes` is small (<50 KB/s) and `wchar` is large.** The original 4.8 MB/s
+  was syscall traffic read as disk traffic — the app polls `/api/status` every
+  2 s and each response is a `write()` to a socket. Nothing is wrong with the
+  card. Issue #0 closes as a measurement error and E4 proceeds with the real
+  number.
+- **`write_bytes` is large.** Real. Section 3 of the output lists the files the
+  API holds open with their write positions; a growing `pos` is the culprit.
+  Send me that section and I will fix it (that is Step 3 of the plan).
+- **`write_bytes` is small but the whole card is busy.** Someone else is writing.
+  Section 4's fatrace output names them.
+
+**Step 4 — record it** in `EXPERIMENTS.md` under E4, with the state (speakers
+connected, party active, playing) noted next to the number.
+
+---
+
+### 7B — E7: boot time
+
+**Step 1 — full power cycle.** Pull the power. Do not `sudo reboot` — a warm
+reboot skips firmware init and makes the number look better than the field.
+
+**Step 2 — wait 2 minutes, then SSH in and run it.**
+
+**On the Pi:**
+```bash
+cd ~/campfire-bridge/bridge/diagnostics
+./boot-time.sh
+```
+
+**Step 3 — understand what you can and cannot measure yet.** The gate is
+"power-on to AirPlay target visible, under 45 s". Right now the API starts
+shairport-sync only when party mode is enabled, so **after a cold boot the Pi
+advertises no AirPlay target at all** until you open the app and start a party.
+The script will say so in section 5.
+
+So record two numbers:
+
+- **(a) power-on → `/api/status` answering** — the script measures this.
+- **(b) power-on → AirPlay target visible on the iPhone** — stopwatch, by hand,
+  and note that it currently includes app interaction.
+
+E7 passes on (a) or it does not; (b) cannot pass automatically until work-order
+**#16** (boot auto-reconnect) lands. That is a finding, not a failure — it means
+#16 is a launch gate, not a nice-to-have.
+
+---
+
+### 7C — E3: RAM floor (two reboots)
+
+This decides the board's RAM tier, worth $3–10/unit.
+
+> **Before you start:** you are editing the kernel command line. A typo here
+> makes the Pi refuse to boot and you will have to fix it by putting the SD card
+> in your Mac. The commands below make a backup first — do not skip it. Recovery
+> is at the end of this section.
+
+**Step 1 — back up and set the 1 GB limit.**
+
+**On the Pi:**
+```bash
+sudo cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak
+sudo sed -i 's/$/ mem=1024M/' /boot/firmware/cmdline.txt
+cat /boot/firmware/cmdline.txt
+```
+
+Read that output. It must be **one single line** ending in ` mem=1024M`. If it
+looks wrong, restore immediately: `sudo cp /boot/firmware/cmdline.txt.bak /boot/firmware/cmdline.txt`.
+
+**Step 2 — reboot and confirm the kernel really sees 1 GB.**
+
+**On the Pi:**
+```bash
+sudo reboot
+# wait, SSH back in, then:
+free -h
+```
+
+`total` should read roughly `950Mi`, not 8 GB. If it still says 8 GB the
+parameter did not take and the run is meaningless.
+
+**Step 3 — get into the worst case and capture.** Connect the speakers, start
+the party, play audio, then:
+
+**On the Pi:**
+```bash
+cd ~/campfire-bridge/bridge/diagnostics
+python3 capture.py --label ram-1g --duration 180
+```
+
+**Step 4 — check for swapping during the run.** In a second SSH window while
+the capture runs:
+
+**On the Pi:**
+```bash
+vmstat 1 20
+```
+
+The `si` and `so` columns must stay `0`. Anything else means it ran out of RAM
+and the tier fails.
+
+**Step 5 — repeat at 512 MB.**
+
+**On the Pi:**
+```bash
+sudo cp /boot/firmware/cmdline.txt.bak /boot/firmware/cmdline.txt
+sudo sed -i 's/$/ mem=512M/' /boot/firmware/cmdline.txt
+sudo reboot
+```
+
+Then repeat steps 2–4 with `--label ram-512m`.
+
+**Step 6 — PUT IT BACK.** Do not leave the rig crippled; every later
+measurement would be wrong.
+
+**On the Pi:**
+```bash
+sudo cp /boot/firmware/cmdline.txt.bak /boot/firmware/cmdline.txt
+sudo reboot
+free -h    # must show 8 GB again
+```
+
+**Pass criteria:** no faults, `si`/`so` at 0, peak RAM under 60% of the limit.
+Expect 1 GB to pass and 512 MB to be too tight once OTA has to download and
+verify a firmware image.
+
+**If the Pi will not boot:** power off, put the SD card in your Mac, open
+`cmdline.txt` on the `bootfs` volume in a text editor, delete the ` mem=...M`
+you added, save, eject, put it back.
+
+---
+
+### 7D — E5: camping-mode WiFi/BT coexistence (gate)
+
+The current result is inconclusive because the control did not match: camping
+got 782 s of exposure, home got 362 s. More faults in camping was partly just
+more looking.
+
+> **You need three speakers streaming at once for this.** Memory says the K71
+> and ENAV are not physically on hand, leaving the JBL Go and the XB23. With two
+> speakers this is not the Extended SKU worst case and the result will not
+> settle the gate. Get a third speaker before running it.
+
+**Something changed since the last attempt:** `bridge/scripts/bt-afh.sh` now
+masks the Pi's own WiFi channel on every Bluetooth adapter, which attacks
+exactly the interference E5 is testing for. Confirm it is deployed and running
+before you measure, or you will be re-measuring the old behaviour.
+
+**On the Pi:**
+```bash
+systemctl status campfire-camping-mode --no-pager | head -20
+sudo /usr/local/bin/campfire-bt-afh.sh && echo "AFH applied"
+```
+
+**Step 1 — camping run.** Switch the device to camping mode from the app, join
+your iPhone to the `Campfire` WiFi network, connect all three speakers, start
+the party, AirPlay audio that plays continuously.
+
+**On the Pi** (SSH over the hotspot: `ssh pi@192.168.4.1`):
+```bash
+cd ~/campfire-bridge/bridge/diagnostics
+python3 capture.py --label camping-3bt-600 --duration 600
+```
+
+Ten minutes. Leave the music playing the whole time. Do not touch the app.
+
+**Step 2 — home control run, same length.** Switch back to home WiFi, same three
+speakers, same audio, same volume.
+
+**On the Pi:**
+```bash
+python3 capture.py --label home-3bt-600 --duration 600
+```
+
+**Step 3 — compare.**
+
+**On the Pi:**
+```bash
+python3 report.py ~/campfire-diag/camping-3bt-600.json ~/campfire-diag/home-3bt-600.json
+```
+
+**Pass if:** fault counts are the same in both. Equal exposure is the whole
+point — 600 s each, nothing else different.
+
+**One thing to sanity-check in the output:** last time `hostapd` CPU read 0.0%
+in every camping run, which is suspicious for a run that is supposed to be
+hosting an access point. If it reads 0.0 again, the capture is not seeing the AP
+process and the camping run is not measuring what it claims.
+
+**If camping is genuinely worse:** move the AP to a 2.4 GHz channel far from
+where the dongles hop (1/6/11), or to 5 GHz — but 5 GHz-only excludes older
+phones, and camping mode is a launch requirement, so it is a real trade.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Tool |

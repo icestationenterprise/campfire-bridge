@@ -116,7 +116,7 @@ systemctl --user restart campfire-bridge
 | shairport-sync (AirPlay 2) | ✅ Done | Runs as user service; starts/stops with party mode |
 | PulseAudio + BT stack | ✅ Done | multi-adapter, A2DP auto-recovery on restart |
 | Bluetooth scripts (bt_connect, bt_pair, etc.) | ✅ Done | Keep |
-| Bridge API (Express/TS) | 🔶 Refactored 2026-10-07, **not yet verified on the Pi** | BlueZ via D-Bus snapshot (`bluez.ts`), incremental party graph (`party.ts`), crash-proof routes; same HTTP contract. Deploy + run the verification checklist in `bridge/docs/troubleshooting.md` before committing. |
+| Bridge API (Express/TS) | ✅ Done | BlueZ via D-Bus snapshot (`bluez.ts`), incremental party graph (`party.ts`), crash-proof routes; same HTTP contract. Refactored 2026-10-07, verified on the Pi and committed 2026-10-12. |
 | librespot | ✅ Removed | Deleted — no longer in codebase |
 | SpotifyContext / spotifyAuth | ✅ Removed | Deleted from app |
 | React Native app (iOS) | 🔶 Functional | Spotify removed; Home/Camping mode toggle; default Home URL = `http://campfire-bridge.local:3000`; Tailscale removed; auto URL fallback (3-failure → switch mode); migration for old AsyncStorage keys; needs account, setup wizard, device mgmt, ownership |
