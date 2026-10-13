@@ -145,7 +145,9 @@ The Pi drops off home WiFi now. SSH dies. Then:
    with `nmcli con show campfire-hotspot --show-secrets | grep psk` — do not paste
    it into this repo, which is public
 2. On your **Mac**: join `Campfire` as well
-3. SSH back in: `ssh pi@campfire-bridge.local` (or `ssh pi@10.42.0.1`)
+3. SSH back in: `ssh pi@192.168.4.1` (the hotspot profile sets a static
+   `192.168.4.1/24`, not NetworkManager's default `10.42.0.1`). `.local` may
+   also work via the hotspot's mDNS, but the IP always does.
 4. On the phone: AirPlay to Campfire Bridge, all 4 outputs, play music
 5. ```
    cd ~/campfire-bridge/bridge/diagnostics
