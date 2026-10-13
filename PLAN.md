@@ -116,13 +116,13 @@ systemctl --user restart campfire-bridge
 | shairport-sync (AirPlay 2) | ✅ Done | Runs as user service; starts/stops with party mode |
 | PulseAudio + BT stack | ✅ Done | multi-adapter, A2DP auto-recovery on restart |
 | Bluetooth scripts (bt_connect, bt_pair, etc.) | ✅ Done | Keep |
-| Bridge API (Express/TS) | ✅ Done | BT mgmt + party mode routes; playback routes removed; `network_mode` in `/api/status` |
+| Bridge API (Express/TS) | 🔶 Refactored 2026-10-07, **not yet verified on the Pi** | BlueZ via D-Bus snapshot (`bluez.ts`), incremental party graph (`party.ts`), crash-proof routes; same HTTP contract. Deploy + run the verification checklist in `bridge/docs/troubleshooting.md` before committing. |
 | librespot | ✅ Removed | Deleted — no longer in codebase |
 | SpotifyContext / spotifyAuth | ✅ Removed | Deleted from app |
 | React Native app (iOS) | 🔶 Functional | Spotify removed; Home/Camping mode toggle; default Home URL = `http://campfire-bridge.local:3000`; Tailscale removed; auto URL fallback (3-failure → switch mode); migration for old AsyncStorage keys; needs account, setup wizard, device mgmt, ownership |
 | Mock bridge server | ✅ Done | Updated to match current API shape |
 | mDNS / avahi | ✅ Done | Advertises AirPlay; needs device serial in TXT record |
-| camping-mode daemon | 🔶 Partial | `camping-mode.sh` + NM hotspot profile done; auto-switches home↔camping; oscillation bug fixed (45s reconnect wait); `POST /api/network/mode` endpoint done; `network_mode` in `/api/status`; SSID is "Campfire" (not serial-suffixed yet — needs #10); LED/button not done |
+| camping-mode daemon | 🔶 Partial | `camping-mode.sh` + NM hotspot profile done; auto-switches home↔camping; home→camping needs 4 consecutive misses (2 min) so WiFi blips no longer kill AirPlay; never scans or switches while a phone is on the hotspot; WiFi power save disabled; `POST /api/network/mode` endpoint done; SSID is "Campfire" (not serial-suffixed yet — needs #10); LED/button not done |
 | App auto URL detection | ✅ Done | After 3 failures on primary URL, tries fallback; auto-switches mode on success |
 
 ---
@@ -357,12 +357,34 @@ with more, slower cores is worse, not better.
 - [ ] E7 — boot time to first AirPlay availability (gate, target < 45 s)
 - [ ] Acceptance run on 1–2 candidate boards before committing to volume
 
+### Radio Layout (design requirement, learned 2026-10-07)
+
+Moving three Bluetooth speakers ~15 ft from the dev rig in different directions
+broke the audio; the links, not the software, were the limit. Three USB dongles
+plugged side by side into the Pi are the worst possible radio layout: they
+desense each other, sit next to the WiFi antenna, and have no antenna gain.
+Requirements for the production enclosure:
+
+- **One radio per speaker, physically spread to the enclosure's extremes.**
+  Read the board like a map: radio A at north, B at south-east, C at south-west,
+  as far apart as the housing allows, antennas at the edges, away from the WiFi
+  antenna and from any USB 3 lines.
+- **Robust radios, not bare class 2 dongles.** Class 1 (+20 dBm) Bluetooth
+  modules or dongles with a real antenna (PCB or external). Audio flows Pi →
+  speaker, so transmit power on our side is what buys range.
+- **Directional pairing in the app.** Each connected speaker shows which radio
+  it is on (the API already returns `adapter` per device in `GET /api/bt/devices`),
+  so a user can rotate the device to point each radio at its speaker.
+- Human bodies and walls attenuate 2.4 GHz heavily (a crowd between the device
+  and a speaker is several dB per person); the layout must assume a party, not
+  a bench.
+
 ### Bill of Materials
 
 | Component | Limited SKU | Extended SKU | Notes |
 |---|---|---|---|
 | SBC | Pi 5 (dev) or CM4 (production) | same | CM4 preferred for production — smaller, more reliable |
-| External USB BT dongles | 1 | 3 | Must be confirmed compatible with PulseAudio BT sink |
+| External BT radios (USB dongle or module) | 1 | 3 | Class 1 with a real antenna; one per speaker; placed per **Radio Layout** above. Must be confirmed compatible with PulseAudio BT sink |
 | USB audio adapter | 1 | 1 | UAC1 class-compliant (e.g. Sabrent AU-EMAC); drives built-in speaker via amp board |
 | Class D amp board | Yes | Yes | PAM8403 (2×3W, 5V); between USB audio adapter line out and speaker driver |
 | Built-in speaker driver | Yes | Yes | 4Ω 3W full-range, ~2–3" (e.g. Adafruit #1314); mounted in enclosure |
@@ -500,7 +522,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 
 | # | Issue | Impact | Status |
 |---|---|---|---|
-| 0 | **Bridge API writes ~4.8 MB/s to the SD card continuously** (`node`, measured 2026-10-06). ~396 GB/day — will wear out SD/eMMC within a year in the field, and affects every unit shipped. Not journald; attributed to our own process. | **High — field reliability, blocks storage sizing in #28** | Open — find and fix the writer in `bridge/api/` |
+| 0 | **Bridge API writes ~4.8 MB/s to the SD card continuously** (`node`, measured 2026-10-06). ~396 GB/day — will wear out SD/eMMC within a year in the field, and affects every unit shipped. Not journald; attributed to our own process. | **High — field reliability, blocks storage sizing in #28** | Open — nothing in `bridge/api/src` writes continuously (only calibration saves and mode requests). Attribute on the Pi with the fd/fatrace commands in `bridge/docs/troubleshooting.md` → "SD card write rate" before changing code |
 | 1 | **Android offline/camping**: Cast SDK requires internet for session establishment. Android users cannot use Cast in camping mode (no internet). | Medium — Android camping users only | Evaluating: UPnP/DLNA as offline Android fallback |
 | 2 | **FCC certification timeline**: ~6–12 weeks and must be done before US sales. | High — hard blocker for launch | Not started — start immediately |
 | 3 | **Remote relay + camping conflict**: Cloud relay requires internet. When device is in camping mode, relay is unavailable — this is expected and correct behavior. App must gracefully handle relay-unavailable state and prompt user to join device hotspot. | Low — expected behavior, needs UX handling | UX design needed |
