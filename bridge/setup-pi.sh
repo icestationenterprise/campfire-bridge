@@ -15,7 +15,7 @@ sudo apt update && sudo apt upgrade -y
 step "2/9  Installing system dependencies"
 sudo apt install -y \
   git curl \
-  bluetooth bluez bluez-tools \
+  bluetooth bluez bluez-tools iw \
   pulseaudio pulseaudio-module-bluetooth \
   shairport-sync
 
@@ -53,18 +53,6 @@ load-module module-bluetooth-policy
 load-module module-bluetooth-discover
 EOF
 
-# Configure shairport-sync to output through PulseAudio so it feeds
-# into the party combined sink automatically when party mode is active.
-sudo tee /etc/shairport-sync.conf > /dev/null << 'EOF'
-general = {
-  name = "Campfire";
-  ignore_volume_control = "no";
-};
-pa = {
-  // Output to PulseAudio default sink (becomes campfire_party in party mode)
-};
-EOF
-
 step "6/9  Enabling lingering user session (PulseAudio starts at boot)"
 # Without this, user systemd services don't start until someone logs in.
 sudo loginctl enable-linger pi
@@ -81,6 +69,10 @@ fi
 cd bridge/api
 npm install
 npm run build
+
+# shairport-sync outputs to PulseAudio's default sink, which the bridge API
+# points at campfire_party while party mode is active.
+sudo cp /home/pi/campfire-bridge/bridge/config/shairport-sync.conf /etc/shairport-sync.conf
 
 step "8/9  Installing campfire-bridge as a user systemd service"
 # Running as a user service means it shares the pi user's PulseAudio session
@@ -108,7 +100,16 @@ systemctl --user daemon-reload
 systemctl --user enable campfire-bridge
 systemctl --user start campfire-bridge || true
 
-step "9/9  Configuring camping mode (auto WiFi / hotspot switching)"
+step "9/9  Configuring networking (WiFi power save off, camping mode)"
+
+# The Pi's brcmfmac WiFi drops frames while power-saving. On a device whose
+# whole job is to receive a real-time audio stream that shows up as AirPlay
+# stutter and the app periodically losing the bridge. Disable it everywhere.
+sudo tee /etc/NetworkManager/conf.d/campfire-wifi-powersave.conf > /dev/null << 'EOF'
+[connection]
+# 2 = disable
+wifi.powersave = 2
+EOF
 
 # Install NetworkManager hotspot profile
 sudo cp /home/pi/campfire-bridge/bridge/config/campfire-hotspot.nmconnection \
@@ -117,10 +118,12 @@ sudo chmod 600 /etc/NetworkManager/system-connections/campfire-hotspot.nmconnect
 sudo chown root:root /etc/NetworkManager/system-connections/campfire-hotspot.nmconnection
 sudo nmcli con reload
 
-# Install camping-mode daemon
+# Install camping-mode daemon and the Bluetooth channel-steering helper it calls
 sudo cp /home/pi/campfire-bridge/bridge/scripts/camping-mode.sh \
         /usr/local/bin/campfire-camping-mode.sh
-sudo chmod +x /usr/local/bin/campfire-camping-mode.sh
+sudo cp /home/pi/campfire-bridge/bridge/scripts/bt-afh.sh \
+        /usr/local/bin/campfire-bt-afh.sh
+sudo chmod +x /usr/local/bin/campfire-camping-mode.sh /usr/local/bin/campfire-bt-afh.sh
 
 # Install and enable camping-mode systemd service (runs as root/system)
 sudo cp /home/pi/campfire-bridge/bridge/systemd/camping-mode.service \

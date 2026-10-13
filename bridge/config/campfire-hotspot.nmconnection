@@ -15,6 +15,9 @@ mode=ap
 ssid=Campfire
 band=bg
 channel=6
+# 2 = disable WiFi power saving. The Pi's brcmfmac radio drops frames when it
+# power-saves, which shows up as AirPlay stutter and the app losing the bridge.
+powersave=2
 
 [wifi-security]
 key-mgmt=wpa-psk
