@@ -168,6 +168,48 @@ Cheap eMMC and slow SoCs both hurt here, so measure it on every candidate board.
 
 ---
 
+## E7 result — Pi 5 dev rig, 2026-10-13 (cold power-on)
+
+```
+kernel 3.701s + userspace 12.148s = 15.849s
+multi-user.target reached at 12.081s
+campfire-bridge.service (user) active at 12.2s   <-- (a) the measurable gate
+/api/status answering                             confirmed
+shairport-sync.service                            NOT STARTED
+```
+
+**(a) power-on to API answering: 12.2 s. Passes the 45 s gate with 33 s of margin.**
+
+**(b) power-on to AirPlay target visible: cannot be measured.** `index.ts` starts
+shairport-sync only on `POST /api/party/enable`, so the device advertises nothing
+until a user opens the app, reconnects speakers and starts a party. The gate as
+written in this file is not a speed question — it is blocked on work-order **#16
+(boot auto-reconnect)**. A customer plugging in at a campsite currently sees an
+empty AirPlay list no matter how fast the Pi boots. **#16 is therefore a launch
+gate, not an optimisation.**
+
+### Where the 12.2 s goes, and what it means for a cheaper board
+
+| Unit | Cost | Note |
+|---|---|---|
+| `NetworkManager-wait-online.service` | **5.990 s** | Blocks `multi-user.target` waiting for the network. Almost half the boot. |
+| `NetworkManager.service` | 2.460 s | |
+| `pulseaudio.service` (user) | 1.916 s | |
+| `dev-mmcblk0p2.device` | 923 ms | SD card — **scales up on slow eMMC** |
+| `cloud-init-main.service` | 695 ms | Not needed on an appliance image |
+| `tailscaled.service` | 692 ms | **Should not be here** — Tailscale is out of the architecture |
+| `ModemManager.service` | 474 ms | No modem on this product |
+
+Roughly 7.8 s of the 12.2 s is removable or shrinkable without touching our own
+code. That matters for board selection: this is a Pi 5 with a fast card, and E7
+is the experiment that is supposed to constrain the SoC and storage choice. A
+cheap board with slow eMMC inflates the kernel, `dev-mmcblk0p2.device` and
+PulseAudio lines together, so the 33 s of margin is not as large as it looks.
+**Re-measure E7 on every candidate board**, and strip the four unnecessary units
+before using the number as a board-comparison baseline.
+
+---
+
 ## Measured baseline — Pi 5 dev rig, 2026-10-05
 
 3 BT speakers + wired in sync, AirPlay streaming, open board on a desk. This is
@@ -256,10 +298,10 @@ Fill this in as you go. This is what you take to suppliers.
 | E1 | I²S amp replaces USB adapter + PAM8403 | Not run — blocked on setting `BUILTIN_SINK_NAME` on the Pi | $4–7 | open | — |
 | E2 | Dongles needed for 3 speakers | **Not validly run.** The only capture (`2bt-wired`) is **46 s** against a 300 s protocol for an intermittent fault, and records sink MACs but not which adapter each used. The audible 2-on-1-dongle chopping remains an uncontrolled observation | $0–16 | **Do not cut dongle count — one per speaker.** Re-run at 300 s, logging adapter per sink | 2026-09-20 |
 | E3 | RAM floor | Peak **541 MB** across 25 runs (max of any run; idle 528 MB). Constrained 1024/512 MB boot runs still not done | $3–10 | **1 GB tier**; 512 MB too tight once OTA downloads an image | 2026-10-05 |
-| E4 | Storage size + writes/day | **FAIL — confirmed, and it is a bug in our own code.** The writer is **`node`, the bridge API, at 4809.6 KB/s** (2026-10-06, 30 s window, speakers connected). Only one device matches (`mmcblk0`), so no double-count, and per-process total (4814.9 KB/s) matches diskstats (4810.3 KB/s) to within 0.1% — `capture.py`'s ~4.2 MB/s across all 25 runs was correct. That is **~396 GB/day, ~145 TB/year**, roughly 400× the <1 GB/day this experiment assumed, and enough to wear out an SD card or low-endurance eMMC inside a year. journald is not involved (8M total). Second writer `jbd2/mmcblk0p2-8` at 5.3 KB/s is just the ext4 journal committing those writes | $2–5 | **Fix the API before choosing storage.** Storage sizing against this number would be sizing against a defect | 2026-10-06 |
+| E4 | Storage size + writes/day | **FAIL — confirmed, and it is a bug in our own code.** The writer is **`node`, the bridge API, at 4809.6 KB/s** (2026-10-06, 30 s window, speakers connected). Only one device matches (`mmcblk0`), so no double-count, and per-process total (4814.9 KB/s) matches diskstats (4810.3 KB/s) to within 0.1% — `capture.py`'s ~4.2 MB/s across all 25 runs was correct. That is **~396 GB/day, ~145 TB/year**, roughly 400× the <1 GB/day this experiment assumed, and enough to wear out an SD card or low-endurance eMMC inside a year. journald is not involved (8M total). Second writer `jbd2/mmcblk0p2-8` at 5.3 KB/s is just the ext4 journal committing those writes | $2–5 | **Fix the API before choosing storage.** Storage sizing against this number would be sizing against a defect. **Idle floor measured 2026-10-13: `write_bytes` 0.0 KB/s, `wchar` 68.3 KB/s, whole card 0.8 KB/s** — so the API writes nothing to disk at rest, and the matched-state re-run (speakers connected, party active, audio playing) is still outstanding | 2026-10-13 |
 | E5 | Camping-mode coexistence | **Inconclusive — the control does not match.** Camping ran 3 captures (181 s, 301 s, 300 s) with **3 underruns in one 300 s run**, 0 in the other two. Home control (`extended-3bt`) ran only 181 s × 2, 0 faults. Camping got 782 s of exposure vs home's 362 s, so more faults is partly just more looking. `hostapd` CPU reads 0.0 in every camping run, which is itself suspect for a run that is supposed to be hosting the AP | gate | open — re-run matched at 600 s each | 2026-10-05 |
 | E6 | Peak current draw | Not run — needs a ~$15 inline USB power meter | $2–6 | open | — |
-| E7 | Boot time | Not run | gate | open | — |
+| E7 | Boot time | **(a) PASS — 15.8 s to multi-user, API answering at 12.2 s** (2026-10-13, Pi 5, cold power-on). **(b) unmeasurable:** shairport-sync starts only on party enable, so a cold-booted device advertises no AirPlay target at all | gate | **(a) passes with 33 s of margin. (b) is blocked on #16 (boot auto-reconnect), which this makes a launch gate** | 2026-10-13 |
 
 **Highest-value work remaining, in order:** E4 attribution (a 4 MB/s idle writer is a
 field-reliability bug *and* it inflates every CPU number below), E5 re-run with a

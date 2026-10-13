@@ -28,17 +28,49 @@ hr() { printf '%s\n' "───────────────────�
 kbs() { awk -v b="$1" -v s="$2" 'BEGIN{printf "%.1f", b/1024/s}'; }
 
 # ─── 0. State check ─────────────────────────────────────────────────────────
+# The 4.8 MB/s was measured with speakers connected and the party running. An
+# idle measurement cannot reproduce it, so refuse to run in the wrong state
+# rather than produce a meaningless 0.0 KB/s.
+#
+# Note both probes have to reach across the sudo boundary: /api/status is fine
+# over loopback, but pactl talks to the *user* PulseAudio instance, which is
+# invisible to root (wrong XDG_RUNTIME_DIR). Run it as the owning user.
 hr; echo "0. STATE — the 4.8 MB/s was measured with speakers connected."
 hr
-PARTY=$(curl -s --max-time 2 http://127.0.0.1:3000/api/status 2>/dev/null \
-        | grep -o '"party_active":[a-z]*' | cut -d: -f2)
-echo "party_active   : ${PARTY:-unreachable}"
-echo "connected sinks: $(pactl list short sinks 2>/dev/null | grep -c bluez || echo '?')"
+
+PI_USER=${PI_USER:-pi}
+PI_UID=$(id -u "$PI_USER" 2>/dev/null || echo 1000)
+as_user() { sudo -u "$PI_USER" XDG_RUNTIME_DIR="/run/user/$PI_UID" "$@"; }
+
+PARTY=$(curl -s --max-time 3 http://127.0.0.1:3000/api/status 2>/dev/null \
+        | python3 -c 'import json,sys
+try: print(str(json.load(sys.stdin)["party"]["active"]).lower())
+except Exception: print("unreachable")' 2>/dev/null || echo unreachable)
+SINKS=$(as_user pactl list short sinks 2>/dev/null | grep -c bluez || echo 0)
+
+echo "party.active       : $PARTY"
+echo "connected BT sinks : $SINKS"
+echo "default sink       : $(as_user pactl get-default-sink 2>/dev/null || echo '?')"
 echo
-echo "If party_active is false or there are 0 bluez sinks, stop now, start the"
-echo "party from the app with speakers playing, and re-run. An idle measurement"
-echo "will not reproduce the fault."
-echo
+
+if [ "$PARTY" != "true" ] || [ "${SINKS:-0}" -lt 1 ]; then
+  cat <<'TXT'
+WRONG STATE — not measuring. This would report 0.0 KB/s and prove nothing.
+
+Do this first, then re-run:
+  1. Open the Campfire app and connect your speakers.
+  2. Start the party.
+  3. AirPlay something that plays for the whole test (a long track, not a
+     30-second clip) and leave it playing.
+  4. sudo ./sd-write-attribute.sh
+
+To measure the idle floor on purpose instead:  FORCE=1 sudo ./sd-write-attribute.sh
+TXT
+  [ "${FORCE:-0}" = "1" ] || exit 2
+  echo
+  echo "FORCE=1 — continuing anyway. This is an IDLE measurement; label it as such."
+  echo
+fi
 
 # ─── 1. Per-process, syscall vs block device ────────────────────────────────
 PID=$(pgrep -f 'node .*dist/index.js' | head -1)
