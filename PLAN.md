@@ -380,11 +380,45 @@ Requirements for the production enclosure:
   and a speaker is several dB per person); the layout must assume a party, not
   a bench.
 
+### Battery & Safe Shutdown (new requirement, 2026-10-13)
+
+The device carries a **rechargeable battery** and **shuts itself down cleanly
+when charge drops below a threshold**. It is never relying on the user to shut
+it down, and never losing power mid-write.
+
+This was raised to solve Known Issue #8 (unclean power-off), and it does — but
+it is a larger change than that, because it makes the product genuinely
+portable. A camping speaker that needs wall power was always slightly
+incoherent; this resolves that.
+
+**What it adds to the design:**
+
+| Part | Why |
+|---|---|
+| Li-ion cell/pack | Capacity set by the runtime target — **still undecided, and it drives cost, size and weight more than any other choice** |
+| Charge controller / PMIC with load sharing | Must run *and* charge simultaneously — a user will plug in while music plays |
+| Fuel gauge (I²C, e.g. MAX17048) | The threshold trigger. Without a real state-of-charge reading, "low battery" is a guess |
+| Power button | Combine with the camping-mode / factory-reset button already required (Known Issue #4) — one button, press patterns |
+| Safe-shutdown service | Fuel gauge below threshold → `systemctl poweroff`. Firmware work, small. |
+
+**Open question that blocks the BOM: what is the runtime target?** 4 hours and 12
+hours are different products — roughly 1 vs 3–4 18650 cells, and a meaningful
+step in enclosure size, weight and cost. Nothing downstream can be specified
+until this number exists.
+
+**This also makes read-only rootfs (Known Issue #8) lower priority rather than
+unnecessary** — a battery removes the common case of unclean power-off, but not
+a depleted pack, a failed cell, or a user pulling the battery.
+
 ### Bill of Materials
 
 | Component | Limited SKU | Extended SKU | Notes |
 |---|---|---|---|
 | SBC | Pi 5 (dev) or CM4 (production) | same | CM4 preferred for production — smaller, more reliable |
+| Li-ion cell / pack | TBD | TBD | **Blocked on the runtime target** (see Battery & Safe Shutdown). Capacity drives cost, size and weight. |
+| Charge controller / PMIC | 1 | 1 | Must support load sharing — run while charging |
+| Fuel gauge | 1 | 1 | I²C state-of-charge, e.g. MAX17048. Drives the safe-shutdown threshold. |
+| Power button | 1 | 1 | Same physical button as camping toggle / factory reset |
 | External BT radios (USB dongle or module) | 1 | 3 | Class 1 with a real antenna; one per speaker; placed per **Radio Layout** above. Must be confirmed compatible with PulseAudio BT sink |
 | USB audio adapter | 1 | 1 | UAC1 class-compliant (e.g. Sabrent AU-EMAC); drives built-in speaker via amp board |
 | Class D amp board | Yes | Yes | PAM8403 (2×3W, 5V); between USB audio adapter line out and speaker driver |
@@ -481,7 +515,7 @@ Prerequisites always come before the things that need them.
 Items with no dependency on each other can be worked in parallel.
 When asked "what is next", Claude will present the first three `[ ]` items as options.
 
-- [ ] **#1 — Start FCC certification** — Contact a certified test lab (NTS, SGS, UL). Submit application. Runs 6–12 weeks externally. Blocks US sales. Kick this off before writing any code.
+- [ ] **#1 — Start FCC certification** — Contact a certified test lab (NTS, SGS, UL). Submit application. Runs 6–12 weeks externally. Blocks US sales. ⚠️ **CONFLICT raised 2026-10-13 by the battery requirement (#27b):** FCC tests the unit *as configured*. Adding a battery charger/PMIC later introduces a new switching supply — a new unintentional radiator — which means re-testing and paying twice. **Lock the battery decision before submitting.** Lithium cells also carry their own certification track (UN38.3 transport, IEC 62133-2 / UL 2054 pack safety) with a timeline comparable to FCC's, so start both together.
 - [ ] **#2 — Form LLC** — Must happen before taking any money. Online filing in most states, same-day possible.
 - [x] **#3 — Remove librespot from bridge** *(⚡ quickest win)* — Delete librespot systemd service, `bridge/config/librespot.env`, `bridge/systemd/librespot.service`, librespot API routes. ~30 min.
 - [x] **#4 — Remove Spotify code from app** *(⚡ quickest win)* — Delete `SpotifyContext.tsx`, `SpotifyLoginScreen.tsx`, `spotifyAuth.ts`, `spotifyClientId` from SettingsContext, Music tab Spotify UI. ~30 min.
@@ -509,6 +543,8 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 - [ ] **#26 — App: iOS App Store submission** — Requires privacy policy (#9) + CI/CD (#24) + account screens (#12) + setup wizard (#13) + TestFlight beta pass.
 - [ ] **#27 — App: Android Google Play submission** — Requires Android support (#25) + privacy policy (#9) + CI/CD (#24).
 - [~] **#27a — Hardware: Characterization & cost-down testing** — Run the `bridge/diagnostics/` harness on the Pi 5 to measure actual CPU (busiest-core, not total), RAM, storage-write, power and thermal requirements; sweep constraints to find the failure knee; run the per-component experiments in `EXPERIMENTS.md` (I²S amp, dongle count, RAM floor, storage, coexistence, power, boot time). Produces the measured spec that #28 buys against. No software prerequisites — can start now, in parallel with everything else. **In progress:** CPU/clock/RAM/thermal/`dsp_bench` baseline measured and recorded in `bridge/diagnostics/EXPERIMENTS.md`. Still outstanding: E5 camping coexistence (gate), E2 controlled re-run, E7 boot time, E6 power, E1 I²S amp, E3 RAM boot runs, E4 storage (needs the raw captures off the Pi).
+- [ ] **#27b — Hardware: Battery subsystem decision + characterization** *(new 2026-10-13)* — Settle the **runtime target** first; everything else follows from it. Then select cell/pack, charge controller with load sharing, and fuel gauge; wire the safe-shutdown service to a state-of-charge threshold; combine the power button with the camping/factory-reset button. Run **E8** (battery runtime, charge-while-playing peak, safe-shutdown threshold verification). **Gates #28, and should gate #1 — see the conflict note below.**
+  - ⚠️ **This raises the stakes on #27a rather than lowering them.** Battery size scales linearly with continuous draw, so the SoC choice now drives pack cost, size and weight as well as BOM cost. At a Pi 5's load it takes roughly **5 × 18650 cells for 4 hours**; halving the draw halves the pack. The "ship a Pi 5 as-is and defer cost-down to batch 2" path is much weaker once the product is battery-powered — a cheaper, cooler board pays for itself twice.
 - [ ] **#28 — Hardware: BOM finalization** — Confirm all components (SBC, dongles, USB hub, DAC/amp, speaker, PSU, LED, button, enclosure) for both SKUs with suppliers and quantities. Requires characterization results (#27a) — do not commit to suppliers before the measured spec exists. Runs in parallel with all software work.
 - [ ] **#29 — Hardware: Factory provisioning jig + process** — Serial number generation script (batch by SKU), cert generation + flash script, firmware image, label printing. Requires device identity spec (#10) + BOM finalized (#28).
 - [ ] **#30 — E-commerce: Shopify store** — Limited + Extended SKU listings, payment processing, shipping. Requires LLC (#2).
@@ -523,7 +559,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 
 | # | Issue | Impact | Status |
 |---|---|---|---|
-| 0 | **Bridge API writes ~4.8 MB/s to the SD card continuously** (`node`, measured 2026-10-06). ~396 GB/day — will wear out SD/eMMC within a year in the field, and affects every unit shipped. Not journald; attributed to our own process. | **High — field reliability, blocks storage sizing in #28** | Open — nothing in `bridge/api/src` writes continuously (only calibration saves and mode requests). Attribute on the Pi with the fd/fatrace commands in `bridge/docs/troubleshooting.md` → "SD card write rate" before changing code |
+| 0 | **Bridge API writes ~4.8 MB/s to the SD card continuously** (measured 2026-10-06). | ~~High~~ — **downgraded** | **Does not reproduce (2026-10-13).** Matched-state re-measurement (party active, 3 speakers connected, audio playing) shows `write_bytes` 0.0 KB/s for the API and 0.0 KB/s for the whole card. No continuous write exists in either the old or current code, and the original per-process attribution came from a hand-read that was probably `wchar` (sockets), not `write_bytes`. **Storage sizing for #28 is unblocked.** One loose end: re-run with the app's Connections tab open — it scans continuously (`DevicesScreen.tsx:149`) and BlueZ rewrites its device cache on every discovery, which would be a real write attributed to `bluetoothd`. Closes once that is checked. |
 | 1 | **Android offline/camping**: Cast SDK requires internet for session establishment. Android users cannot use Cast in camping mode (no internet). | Medium — Android camping users only | Evaluating: UPnP/DLNA as offline Android fallback |
 | 2 | **FCC certification timeline**: ~6–12 weeks and must be done before US sales. | High — hard blocker for launch | Not started — start immediately |
 | 3 | **Remote relay + camping conflict**: Cloud relay requires internet. When device is in camping mode, relay is unavailable — this is expected and correct behavior. App must gracefully handle relay-unavailable state and prompt user to join device hotspot. | Low — expected behavior, needs UX handling | UX design needed |

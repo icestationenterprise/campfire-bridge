@@ -112,6 +112,15 @@ if awk -v d="$DISK_KBS" 'BEGIN{exit !(d < 50)}'; then
     echo "But the CARD is busy ($CARD_KBS KB/s) and it is someone else — see section 3."
   else
     echo "The card is quiet too. Issue #0 does not reproduce in this state."
+    echo
+    echo "ONE HYPOTHESIS LEFT before closing E4: continuous BT discovery."
+    echo "The app auto-scans while its Connections tab is focused"
+    echo "(app/src/screens/DevicesScreen.tsx:149). Every discovered device makes"
+    echo "BlueZ rewrite its cache under /var/lib/bluetooth/<adapter>/cache/, which"
+    echo "IS a real continuous write and is NOT attributed to node."
+    echo
+    echo "Open the app's Connections tab, leave it open, and re-run this script."
+    echo "If the card lights up, that is the root cause and the fix is app-side."
   fi
 else
   echo "CONFIRMED: the API itself is writing $DISK_KBS KB/s to storage."

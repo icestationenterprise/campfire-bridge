@@ -112,6 +112,37 @@ overlayfs in production. Customers will unplug the speaker mid-write.
 
 ---
 
+## E8 — Battery runtime and safe shutdown (new 2026-10-13)
+
+**Not a saving — a new product requirement (work-order #27b).** The device
+carries a rechargeable battery and must shut down cleanly below a charge
+threshold rather than browning out mid-write.
+
+**This experiment is gated on one decision: the runtime target.** 4 h and 12 h
+are different products. Run E6 first — its continuous worst-case draw is the
+input to every other number here.
+
+**Test (needs the pack, charge controller and fuel gauge):**
+1. Charge to full, then run the camping worst case (hotspot + 3 BT + built-in at
+   full volume) until shutdown. Record wall-clock runtime.
+2. Charge-while-playing: plug in during that load and record the *combined*
+   draw. This is the true PSU peak — higher than either charging or playing
+   alone, and the number the adapter must be rated for.
+3. Drain to the threshold and confirm the device powers off **cleanly** —
+   filesystem mounts clean on next boot, no journal replay.
+4. Confirm the fuel gauge reading is trustworthy near empty. Li-ion voltage is
+   flat across the middle of its range, so voltage alone is not state of charge;
+   that is why a gauge IC is in the BOM rather than an ADC on the pack.
+
+**Pass if:** runtime meets the target at the camping worst case, shutdown is
+clean every time across at least 5 cycles, and charge-while-playing does not
+trip under-voltage (`vcgencmd get_throttled` stays 0x0).
+
+**Watch for:** a pack over ~100 Wh is restricted as air cargo and complicates
+shipping. See the cell-count table `power-budget.sh` prints.
+
+---
+
 ## E5 — WiFi/BT coexistence in camping mode
 
 **Not a saving — a risk that constrains which cheap boards are allowed.**
@@ -298,9 +329,10 @@ Fill this in as you go. This is what you take to suppliers.
 | E1 | I²S amp replaces USB adapter + PAM8403 | Not run — blocked on setting `BUILTIN_SINK_NAME` on the Pi | $4–7 | open | — |
 | E2 | Dongles needed for 3 speakers | **Not validly run.** The only capture (`2bt-wired`) is **46 s** against a 300 s protocol for an intermittent fault, and records sink MACs but not which adapter each used. The audible 2-on-1-dongle chopping remains an uncontrolled observation | $0–16 | **Do not cut dongle count — one per speaker.** Re-run at 300 s, logging adapter per sink | 2026-09-20 |
 | E3 | RAM floor | Peak **541 MB** across 25 runs (max of any run; idle 528 MB). Constrained 1024/512 MB boot runs still not done | $3–10 | **1 GB tier**; 512 MB too tight once OTA downloads an image | 2026-10-05 |
-| E4 | Storage size + writes/day | **FAIL — confirmed, and it is a bug in our own code.** The writer is **`node`, the bridge API, at 4809.6 KB/s** (2026-10-06, 30 s window, speakers connected). Only one device matches (`mmcblk0`), so no double-count, and per-process total (4814.9 KB/s) matches diskstats (4810.3 KB/s) to within 0.1% — `capture.py`'s ~4.2 MB/s across all 25 runs was correct. That is **~396 GB/day, ~145 TB/year**, roughly 400× the <1 GB/day this experiment assumed, and enough to wear out an SD card or low-endurance eMMC inside a year. journald is not involved (8M total). Second writer `jbd2/mmcblk0p2-8` at 5.3 KB/s is just the ext4 journal committing those writes | $2–5 | **Fix the API before choosing storage.** Storage sizing against this number would be sizing against a defect. **Idle floor measured 2026-10-13: `write_bytes` 0.0 KB/s, `wchar` 68.3 KB/s, whole card 0.8 KB/s** — so the API writes nothing to disk at rest, and the matched-state re-run (speakers connected, party active, audio playing) is still outstanding | 2026-10-13 |
+| E4 | Storage size + writes/day | **DOES NOT REPRODUCE (2026-10-13).** Matched state — party active, 3 BT sinks connected, `campfire_party` the default sink, audio playing — measured `write_bytes` **0.0 KB/s** for the API and **0.0 KB/s** for the whole `mmcblk0` device over a 30 s window. The 2026-10-06 figure of 4809.6 KB/s does not survive re-measurement. Neither the old `adapters.ts`/`party.ts` nor the current code contains a continuous write (the only `writeFileSync` is a calibration save), and `capture.py`'s `proc_sample()` never read per-process I/O at all, so the "attributed to `node`" half of the original finding came from a hand-read that is no longer reproducible — most likely `wchar` (socket traffic) rather than `write_bytes`. **One hypothesis remains untested:** the app auto-scans continuously while its Connections tab is focused (`DevicesScreen.tsx:149`), and each discovered device makes BlueZ rewrite `/var/lib/bluetooth/<adapter>/cache/`, which is a real continuous write attributed to `bluetoothd`, not `node` | $2–5 | **Storage sizing is unblocked for #28.** Re-run once with the Connections tab open to settle the discovery hypothesis; if that reproduces it, the fix is app-side (stop scanning when not pairing) | 2026-10-13 |
 | E5 | Camping-mode coexistence | **Inconclusive — the control does not match.** Camping ran 3 captures (181 s, 301 s, 300 s) with **3 underruns in one 300 s run**, 0 in the other two. Home control (`extended-3bt`) ran only 181 s × 2, 0 faults. Camping got 782 s of exposure vs home's 362 s, so more faults is partly just more looking. `hostapd` CPU reads 0.0 in every camping run, which is itself suspect for a run that is supposed to be hosting the AP | gate | open — re-run matched at 600 s each | 2026-10-05 |
-| E6 | Peak current draw | Not run — needs a ~$15 inline USB power meter | $2–6 | open | — |
+| E6 | Peak current draw | Meter in hand 2026-10-13; `power-budget.sh` walks the six load states | $2–6 | open — run it; camping (hotspot + 3 BT + amp) is the state that sizes both PSU and battery | — |
+| E8 | Battery runtime + safe shutdown | Not run — new requirement, gated on the runtime target and on E6's continuous draw | gate | open — see #27b | — |
 | E7 | Boot time | **(a) PASS — 15.8 s to multi-user, API answering at 12.2 s** (2026-10-13, Pi 5, cold power-on). **(b) unmeasurable:** shairport-sync starts only on party enable, so a cold-booted device advertises no AirPlay target at all | gate | **(a) passes with 33 s of margin. (b) is blocked on #16 (boot auto-reconnect), which this makes a launch gate** | 2026-10-13 |
 
 **Highest-value work remaining, in order:** E4 attribution (a 4 MB/s idle writer is a

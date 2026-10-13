@@ -100,7 +100,7 @@ systemctl --user daemon-reload
 systemctl --user enable campfire-bridge
 systemctl --user start campfire-bridge || true
 
-step "9/9  Configuring networking (WiFi power save off, camping mode)"
+step "9/10  Configuring networking (WiFi power save off, camping mode)"
 
 # The Pi's brcmfmac WiFi drops frames while power-saving. On a device whose
 # whole job is to receive a real-time audio stream that shows up as AirPlay
@@ -131,6 +131,29 @@ sudo cp /home/pi/campfire-bridge/bridge/systemd/camping-mode.service \
 sudo systemctl daemon-reload
 sudo systemctl enable campfire-camping-mode.service
 sudo systemctl start campfire-camping-mode.service || true
+
+step "10/10  Trimming boot time (E7)"
+
+# Measured 2026-10-13 on the Pi 5: 15.8 s cold boot, bridge API answering at
+# 12.2 s. ~7.3 s of that is units this appliance has no use for, and the cost
+# grows on a slower board with slower storage — which is exactly what E7 is
+# meant to constrain. Each of these is safe on this device:
+#
+#   NetworkManager-wait-online  5.99 s  Blocks multi-user.target until the
+#                                       network is up. Nothing here needs that:
+#                                       camping-mode.sh polls link state itself
+#                                       and the API binds regardless.
+#   cloud-init                  0.70 s  Cloud provisioning. Not an appliance concern.
+#   ModemManager                0.47 s  There is no cellular modem in this product.
+sudo systemctl disable --now NetworkManager-wait-online.service 2>/dev/null || true
+sudo touch /etc/cloud/cloud-init.disabled 2>/dev/null || true
+sudo systemctl disable --now ModemManager.service 2>/dev/null || true
+
+# tailscaled (0.69 s) is DELIBERATELY left running. Tailscale is out of the
+# product architecture, but on a dev rig it is still a way back in when mDNS
+# fails across WiFi bands (PLAN.md Known Issue #6). Remove it from the
+# production image, not from the bench:
+#   sudo systemctl disable --now tailscaled.service
 
 echo ""
 echo "================================================"

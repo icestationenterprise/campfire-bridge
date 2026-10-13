@@ -464,6 +464,46 @@ phones, and camping mode is a launch requirement, so it is a real trade.
 
 ---
 
+### 7E — E6: power budget (you have the meter)
+
+**Wiring:** `wall adapter → USB-C meter → Pi 5`. The meter goes between the
+adapter and the Pi, not on a downstream port.
+
+**Step 1 — record volts AND amps, never amps alone.** USB-C PD negotiates a
+voltage; 2 A at 5 V and 2 A at 12 V are completely different loads. The script
+does the arithmetic.
+
+**Step 2 — run the guided script.** It walks six load states, prompts you for
+each reading, records the Pi's throttle state alongside it, and prints the PSU
+rating and a battery cell-count table.
+
+**On the Pi:**
+```bash
+cd ~/campfire-bridge/bridge/diagnostics
+./power-budget.sh
+```
+
+**Step 3 — the state that matters most is the last one.** Camping mode hosts an
+access point *while* three Bluetooth radios stream and the amp drives the
+built-in speaker. That is the real worst case you ship, it is higher than the
+home-mode load, and it is the number that sizes both the PSU and the battery.
+
+**If the Pi misbehaves with the meter inline** — refuses to boot, warns about
+the power supply, or USB devices start dropping — the meter is interfering with
+PD negotiation and is now part of the circuit you are measuring. Note it and
+treat the readings as a floor rather than a truth.
+
+**Watch `vcgencmd get_throttled`.** The script prints it at every state. `0x0`
+is clean; anything with bit 0 or bit 16 set means under-voltage, and `0x50005`
+means it is actively browning out. An under-voltage reading invalidates the CPU
+numbers from any capture taken in the same state.
+
+**Feeds directly into #27b:** the continuous worst-case draw is the input to
+battery sizing, and the script prints the Wh and 18650 count for 4/6/8/12 hour
+targets so you can see what the runtime decision actually costs.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Tool |
