@@ -229,10 +229,17 @@ Then work through `EXPERIMENTS.md` for the per-component cost-down tests.
 
 ---
 
-## Part 7 — The four remaining experiments, step by step
+## Part 7 — The remaining experiments, step by step
 
-As of 2026-10-12 these four are the open ones. 7A and 7B need nothing you do
-not already own. 7C needs two reboots. 7D needs a third Bluetooth speaker.
+Status as of 2026-10-13:
+
+| | Experiment | State |
+|---|---|---|
+| 7A | E4 — SD write | **Done — does not reproduce.** One loose end: re-run with the app's Connections tab open. |
+| 7B | E7 — boot time | **Done — (a) passes at 12.2 s.** (b) blocked on #16. |
+| 7C | E3 — RAM floor | Open. Two reboots, no parts needed. |
+| 7D | E5 — coexistence | Open. **Needs a third Bluetooth speaker.** |
+| 7E | E6 — power budget | Open. Meter in hand, six states, resumable. |
 
 Deploy the scripts first.
 
@@ -466,43 +473,60 @@ phones, and camping mode is a launch requirement, so it is a real trade.
 
 ---
 
-### 7E — E6: power budget (you have the meter)
+### 7E — E6: power budget (one state per run, resumable)
 
-**Wiring:** `wall adapter → USB-C meter → Pi 5`. The meter goes between the
-adapter and the Pi, not on a downstream port.
+**Wiring, once:** `wall adapter → USB-C meter → Pi 5`. Between the adapter and
+the Pi, not on a downstream port.
 
-**Step 1 — record volts AND amps, never amps alone.** USB-C PD negotiates a
-voltage; 2 A at 5 V and 2 A at 12 V are completely different loads. The script
-does the arithmetic.
-
-**Step 2 — run the guided script.** It walks six load states, prompts you for
-each reading, records the Pi's throttle state alongside it, and prints the PSU
-rating and a battery cell-count table.
+Two of the six states break your SSH session — camping needs you on a different
+WiFi network, and the boot spike needs the Pi unplugged. So this is **not** one
+long interactive session. Each state is its own short command that appends to
+`~/campfire-diag/e6-power.jsonl`. Lose SSH, switch networks, stop for a day —
+nothing is lost. Run them in any order; re-running a state overwrites it.
 
 **On the Pi:**
 ```bash
 cd ~/campfire-bridge/bridge/diagnostics
-./power-budget.sh
+./power-budget.sh              # shows what is done and what is left
 ```
 
-**Step 3 — the state that matters most is the last one.** Camping mode hosts an
-access point *while* three Bluetooth radios stream and the amp drives the
-built-in speaker. That is the real worst case you ship, it is higher than the
-home-mode load, and it is the number that sizes both the PSU and the battery.
+Then work through them. Each prompts for the setup, shows the Pi's throttle
+state, and asks for volts and amps:
+
+```bash
+./power-budget.sh idle         # no speakers, nothing playing
+./power-budget.sh limited      # 1 speaker + audio
+./power-budget.sh extended     # 3 speakers, full volume
+./power-budget.sh builtin      # + built-in speaker (needs the I2S amp)
+./power-budget.sh camping      # hotspot + 3 speakers — you WILL lose SSH
+./power-budget.sh boot         # peak-hold reading after a power cycle
+./power-budget.sh report       # PSU rating + battery sizing table
+```
+
+**Order that minimises pain:** `idle` → `limited` → `extended` (all on home
+WiFi, no interruptions), then `boot` (one power cycle), then `camping` last
+since it needs a network switch on both your Mac and phone. Do `builtin` once
+the amp is wired.
+
+**Record volts AND amps, never amps alone.** USB-C PD negotiates a voltage; 2 A
+at 5 V and 2 A at 12 V are completely different loads.
+
+**The camping state is the one that matters most.** hostapd + 3 BT radios + amp
+is the real worst case you ship, it is higher than the home-mode load, and it
+sizes both the PSU and the battery pack. `report` says so if it is missing.
 
 **If the Pi misbehaves with the meter inline** — refuses to boot, warns about
-the power supply, or USB devices start dropping — the meter is interfering with
-PD negotiation and is now part of the circuit you are measuring. Note it and
-treat the readings as a floor rather than a truth.
+the power supply, USB devices dropping — the meter is interfering with PD
+negotiation and is now part of the circuit you are measuring. Note it and treat
+every reading as a floor.
 
-**Watch `vcgencmd get_throttled`.** The script prints it at every state. `0x0`
-is clean; anything with bit 0 or bit 16 set means under-voltage, and `0x50005`
-means it is actively browning out. An under-voltage reading invalidates the CPU
-numbers from any capture taken in the same state.
+**Throttle codes:** the script prints `vcgencmd get_throttled` at each state.
+`0x0` is clean. Bit 0 means under-voltage now, bit 16 means it happened since
+boot, `0x50005` means it is actively browning out — and an under-voltage reading
+invalidates the CPU numbers from any capture taken in the same state.
 
-**Feeds directly into #27b:** the continuous worst-case draw is the input to
-battery sizing, and the script prints the Wh and 18650 count for 4/6/8/12 hour
-targets so you can see what the runtime decision actually costs.
+**Feeds #27b:** `report` turns the continuous worst case into Wh and 18650 count
+for 4/6/8/12 hour runtime targets, so the runtime decision has a price tag.
 
 ---
 
