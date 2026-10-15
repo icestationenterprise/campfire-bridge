@@ -503,10 +503,16 @@ state, and asks for volts and amps:
 ./power-budget.sh report       # PSU rating + battery sizing table
 ```
 
-**Order that minimises pain:** `idle` → `limited` → `extended` (all on home
-WiFi, no interruptions), then `boot` (one power cycle), then `camping` last
-since it needs a network switch on both your Mac and phone. Do `builtin` once
-the amp is wired.
+**Best order — one pass, no backtracking:**
+
+```
+boot  ->  idle  ->  limited  ->  extended  ->  builtin  ->  camping
+```
+
+A cold boot gives you the `boot` peak *and* lands the Pi in the `idle` state,
+because nothing auto-reconnects yet (#16). From there the speaker count only
+ever goes up: add one, add two more, add the built-in. `camping` goes last
+because it is the only state that moves your Mac and phone to another network.
 
 **Record volts AND amps, never amps alone.** USB-C PD negotiates a voltage; 2 A
 at 5 V and 2 A at 12 V are completely different loads.

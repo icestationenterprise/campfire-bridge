@@ -17,6 +17,13 @@
 # Re-running a state overwrites its previous reading, so a bad measurement is
 # just a re-run.
 #
+# BEST ORDER — one pass, no backtracking, speaker count only ever goes up:
+#   boot -> idle -> limited -> extended -> builtin -> camping
+# A cold boot gives you the 'boot' peak AND lands the Pi in the 'idle' state,
+# since nothing auto-reconnects yet. From there you add one speaker, then two
+# more, then the built-in, then switch to camping last because it is the only
+# state that moves your Mac and phone to another network.
+#
 # ─── WIRING ─────────────────────────────────────────────────────────────────
 #   wall adapter  ──►  USB-C meter  ──►  Pi 5
 # Between the adapter and the Pi, not on a downstream port.
@@ -68,8 +75,17 @@ setup_of() {
 TXT
 ;;
     idle) cat <<'TXT'
-  Disconnect every speaker, no party, nothing playing. This is the standby
-  floor — it sets how long the battery lasts when nobody is using it.
+  No BT speakers CONNECTED, no party, nothing playing.
+
+  Leave the hardware alone — the USB audio adapter stays plugged in, the
+  dongles stay in their ports. "Idle" means no active audio, not a stripped
+  device. Bonded-but-disconnected speakers are correct here.
+
+  Easiest way to reach this state: a cold boot. Nothing auto-reconnects yet
+  (that is work-order #16), so a freshly booted Pi IS the idle state.
+
+  This is the standby floor — it sets how long the battery lasts when nobody
+  is using the thing.
 TXT
 ;;
     limited) cat <<'TXT'
@@ -84,8 +100,15 @@ TXT
 ;;
     builtin) cat <<'TXT'
   Same as 'extended' PLUS the built-in wired speaker at full volume.
-  Requires the MAX98357A I2S amp wired and BUILTIN_SINK_NAME set.
-  Skip this state until the amp exists.
+
+  Needs a working built-in output — EITHER the USB audio adapter path OR the
+  MAX98357A I2S amp. Check which you have:
+      pactl list short sinks        # look for a usb / i2s sink
+      grep BUILTIN_SINK_NAME ~/campfire-bridge/bridge/api/.env
+
+  If you measure this on the USB adapter now and again after swapping to the
+  I2S amp, the difference between the two is the power half of E1 — the A/B
+  baseline that is otherwise lost by skipping the PAM8403 build.
 TXT
 ;;
     camping) cat <<'TXT'
