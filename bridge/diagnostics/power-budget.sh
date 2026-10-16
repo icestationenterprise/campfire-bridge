@@ -57,6 +57,7 @@ label_of() {
     limited)  echo "Limited SKU — 1 BT speaker + audio" ;;
     extended) echo "Extended SKU — 3 BT speakers, full volume" ;;
     builtin)  echo "Extended + built-in wired speaker, full volume" ;;
+    bsolo)    echo "Built-in wired speaker ONLY, full volume" ;;
     camping)  echo "CAMPING — hotspot + 3 BT, full volume" ;;
     *)        echo "" ;;
   esac
@@ -111,6 +112,19 @@ TXT
   baseline that is otherwise lost by skipping the PAM8403 build.
 TXT
 ;;
+    bsolo) cat <<'TXT'
+  The built-in wired speaker ONLY — no Bluetooth speakers connected at all.
+  Party on, AirPlay at FULL volume, audio playing.
+
+  Why this state exists: (this reading - idle) is the built-in audio path's
+  power cost with zero Bluetooth confound. Re-run it after swapping the USB
+  adapter for the MAX98357A I2S amp and the difference between the two is the
+  power half of E1 — cleanly, and without needing three BT speakers.
+
+  ** CONFIRM YOU CAN ACTUALLY HEAR IT. ** If the driver is not wired to the
+  amp, the draw barely moves and the number means nothing.
+TXT
+;;
     camping) cat <<'TXT'
   ** YOU WILL LOSE SSH DOING THIS. That is fine — this script records one
      state per run, so nothing is lost. Read all of it before starting. **
@@ -131,7 +145,7 @@ TXT
   esac
 }
 
-ALL_STATES="boot idle limited extended builtin camping"
+ALL_STATES="boot idle bsolo limited extended builtin camping"
 
 recorded_states() { [ -s "$LOG" ] && python3 - "$LOG" <<'PY'
 import json, sys
@@ -216,7 +230,7 @@ cmd_report() {
   python3 - "$LOG" <<'PY'
 import json, sys
 
-ORDER = ["idle", "limited", "extended", "builtin", "camping", "boot"]
+ORDER = ["idle", "bsolo", "limited", "extended", "builtin", "camping", "boot"]
 seen = {}
 for line in open(sys.argv[1]):
     line = line.strip()
@@ -244,6 +258,7 @@ print("")
 print("  PEAK: %.2f W  (%s)" % (peak["watts"], peak["label"]))
 print("  PSU rating = peak x 1.5 = %.1f W" % (peak["watts"] * 1.5))
 
+# bsolo is a diagnostic delta, never the shipped worst case — excluded.
 CONTINUOUS = ("extended", "builtin", "camping")
 cont = [r for r in rows if r["state"] in CONTINUOUS]
 if cont:
@@ -260,6 +275,12 @@ if cont:
               % (h, wh, mah, mah / CELL_MAH))
     print("    (3.7 V nominal, 85% usable to protect cycle life, 3000 mAh/cell.)")
     print("    Over ~100 Wh a pack is restricted as air cargo — watch that line.")
+
+if "bsolo" in seen and "idle" in seen:
+    delta = seen["bsolo"]["watts"] - seen["idle"]["watts"]
+    print("")
+    print("  Built-in audio path costs %+.2f W over idle (bsolo - idle)." % delta)
+    print("  Re-run 'bsolo' after the I2S swap; the change is E1's power half.")
 
 missing = [k for k in ORDER if k not in seen]
 if missing:

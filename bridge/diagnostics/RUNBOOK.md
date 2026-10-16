@@ -506,8 +506,13 @@ state, and asks for volts and amps:
 **Best order — one pass, no backtracking:**
 
 ```
-boot  ->  idle  ->  limited  ->  extended  ->  builtin  ->  camping
+boot  ->  idle  ->  bsolo  ->  limited  ->  extended  ->  builtin  ->  camping
 ```
+
+`bsolo` (built-in speaker only, no Bluetooth) is a diagnostic, not a shipped
+configuration: `bsolo - idle` is the built-in audio path's power cost with no
+Bluetooth confound, and re-running it after the I²S swap gives E1's power half
+without needing three BT speakers.
 
 A cold boot gives you the `boot` peak *and* lands the Pi in the `idle` state,
 because nothing auto-reconnects yet (#16). From there the speaker count only
