@@ -85,6 +85,10 @@ TXT
   Easiest way to reach this state: a cold boot. Nothing auto-reconnects yet
   (that is work-order #16), so a freshly booted Pi IS the idle state.
 
+  WAIT ~60 SECONDS after boot before reading. Immediately post-boot there is
+  still background activity settling, which inflates idle — and an inflated
+  idle makes every load state look artificially cheap by comparison.
+
   This is the standby floor — it sets how long the battery lasts when nobody
   is using the thing.
 TXT
@@ -221,6 +225,53 @@ cmd_record() {
 
   echo "  recorded -> $LOG"
   echo
+
+  # Catch impossible or implausible readings NOW, while the rig is still set up
+  # and a re-run costs nothing. Days later it costs a whole session.
+  if [ "$st" != "idle" ] && [ "$st" != "boot" ]; then
+    local idle_w
+    idle_w=$(python3 - "$LOG" <<'PY'
+import json, sys
+w = None
+for line in open(sys.argv[1]):
+    line = line.strip()
+    if not line: continue
+    try: r = json.loads(line)
+    except Exception: continue
+    if r.get("state") == "idle": w = r.get("watts")
+print(w if w is not None else "")
+PY
+)
+    if [ -n "$idle_w" ]; then
+      local delta
+      delta=$(awk -v a="$w" -v b="$idle_w" 'BEGIN{printf "%.2f", a-b}')
+      echo "  vs idle (${idle_w} W): ${delta} W"
+      if awk -v d="$delta" 'BEGIN{exit !(d < 0)}'; then
+        echo
+        echo "  *** IMPOSSIBLE: this load state draws LESS than idle. ***"
+        echo "  A device doing work cannot use less power than a device doing"
+        echo "  nothing. Something was not in the state you think it was."
+        echo "  Most likely: the audio stopped, a speaker dropped, or idle was"
+        echo "  read too soon after boot while things were still settling."
+        echo "  Check the rig and re-run:  ./power-budget.sh $st"
+      elif awk -v d="$delta" 'BEGIN{exit !(d < 0.10)}'; then
+        echo
+        echo "  *** SUSPECT: only ${delta} W over idle. ***"
+        if [ "$st" = "bsolo" ] || [ "$st" = "builtin" ]; then
+          echo "  For the built-in speaker that almost certainly means it is NOT"
+          echo "  producing sound. The USB adapter can enumerate and appear in"
+          echo "  pactl while nothing is wired to its output. Confirm you can"
+          echo "  HEAR it, check the party is routing to BUILTIN_SINK_NAME, and"
+          echo "  check volume is not zero."
+        else
+          echo "  Confirm audio is actually PLAYING (not paused), the speakers"
+          echo "  are connected, and the volume is up."
+        fi
+        echo "  Then re-run:  ./power-budget.sh $st"
+      fi
+    fi
+  fi
+  echo
   cmd_status
 }
 
@@ -247,11 +298,26 @@ if not rows:
     print("  nothing usable recorded")
     raise SystemExit
 
+idle_w = seen.get("idle", {}).get("watts")
+
+def verdict(r):
+    if r.get("throttled") not in ("0x0", "n/a", None):
+        return "  UNDER-VOLTAGE " + r["throttled"]
+    if idle_w is None or r["state"] in ("idle", "boot"):
+        return ""
+    d = r["watts"] - idle_w
+    if d < 0:
+        return "  <-- IMPOSSIBLE, below idle"
+    if d < 0.10:
+        return "  <-- suspect, only %+.2f W over idle" % d
+    return ""
+
 pad = max(len(r["label"]) for r in rows)
 for r in rows:
-    flag = "" if r.get("throttled") in ("0x0", "n/a", None) else "   UNDER-VOLTAGE " + r["throttled"]
     print("  %s  %5.2f V  %5.2f A  %6.2f W%s"
-          % (r["label"].ljust(pad), r["volts"], r["amps"], r["watts"], flag))
+          % (r["label"].ljust(pad), r["volts"], r["amps"], r["watts"], verdict(r)))
+
+suspect = [r for r in rows if verdict(r)]
 
 peak = max(rows, key=lambda r: r["watts"])
 print("")
@@ -260,7 +326,13 @@ print("  PSU rating = peak x 1.5 = %.1f W" % (peak["watts"] * 1.5))
 
 # bsolo is a diagnostic delta, never the shipped worst case — excluded.
 CONTINUOUS = ("extended", "builtin", "camping")
-cont = [r for r in rows if r["state"] in CONTINUOUS]
+cont = [r for r in rows if r["state"] in CONTINUOUS and not verdict(r)]
+if suspect:
+    print("")
+    print("  %d reading(s) above are suspect and are EXCLUDED from the battery" % len(suspect))
+    print("  sizing below. Re-measure them before trusting any of this:")
+    for r in suspect:
+        print("    - %s" % r["state"])
 if cont:
     draw = max(r["watts"] for r in cont)
     worst = max(cont, key=lambda r: r["watts"])

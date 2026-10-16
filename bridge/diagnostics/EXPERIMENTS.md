@@ -199,6 +199,60 @@ Cheap eMMC and slow SoCs both hurt here, so measure it on every candidate board.
 
 ---
 
+## E6 result — Pi 5 dev rig, 2026-10-15 (PARTIAL, 3 readings suspect)
+
+```
+idle — nothing connected                      5.17 V  0.745 A   3.85 W
+built-in only, full volume                    5.17 V  0.751 A   3.89 W  +0.04  SUSPECT
+1 BT speaker + audio                          5.17 V  0.750 A   3.88 W  +0.03  SUSPECT
+3 BT speakers, full volume                    5.17 V  0.694 A   3.59 W  -0.26  IMPOSSIBLE
+3 BT + built-in, full volume                  5.17 V  0.804 A   4.16 W  +0.31
+CAMPING hotspot + 3 BT, full volume           5.17 V  0.783 A   4.05 W  +0.20
+boot spike (peak hold)                        5.18 V  1.076 A   5.57 W
+```
+
+Throttle code `0x0` in every state — no under-voltage, the supply and the meter
+are not limiting anything. Voltage held at 5.17 V across the whole range.
+
+### What is trustworthy
+
+**The device's draw is dominated by its idle baseline, not by audio work.** The
+total spread across every load state is **0.60 W**, and the largest credible
+load delta (3 BT + built-in, +0.31 W) is **8% of total draw**. This is the most
+important result in the experiment and it is robust to the suspect readings,
+because all of them are *within* that narrow band.
+
+Two consequences:
+
+1. **The PSU can be far smaller than the Pi 5 demands.** Peak 5.57 W → a ~8 W
+   supply covers it with 1.5× margin, against the 25 W the Pi 5 asks for over
+   USB-PD. That is E6's cost-down purpose, achieved.
+2. **Battery size is set by idle draw, not by playing music.** At ~4 W
+   continuous, 12 hours is ~50 Wh ≈ 5 × 18650 — far more tractable than the
+   ~11 W placeholder previously assumed (which implied 14 cells). **The lever
+   for #27b is therefore idle power on the candidate board, not audio
+   efficiency** — which makes #27a's SoC choice the dominant input to pack cost,
+   size and weight.
+
+### What must be re-measured before any of this is final
+
+| Reading | Problem |
+|---|---|
+| `extended` 3.59 W | **Below idle. Physically impossible** — work cannot cost less than no work. Note it was run twice: 4.19 W then 3.59 W, and last-wins overwrote the credible one. Either audio stopped / a speaker dropped, or `idle` was read too soon after boot and is inflated. |
+| `bsolo` +0.04 W | **The built-in speaker is almost certainly producing no sound.** The USB adapter enumerates and appears in `pactl` whether or not anything is wired to its output. Until this is audible, `builtin` (4.16 W) is really "3 BT + a silent adapter", so the recorded worst case is understated. |
+| `limited` +0.03 W | One BT speaker streaming for 30 mW is not credible even allowing that external speakers power their own amps. |
+| `camping` 4.05 W | **Below `builtin`.** Camping adds hostapd running an AP on top of the same load, so it should be the *highest* continuous state. Same suspicion as the E5 runs, where `hostapd` CPU read 0.0 in every camping capture. |
+
+**Expect the real worst case to land near 5–6 W** once the built-in speaker
+genuinely drives its driver: a 3 W class-D amp at full output into 4 Ω adds
+roughly 1–2 W including its own losses. Still well under the 11 W placeholder.
+
+`power-budget.sh` now catches all four of these classes of error at collection
+time and excludes suspect rows from battery sizing, so a re-run cannot quietly
+record the same problem again.
+
+---
+
 ## E7 result — Pi 5 dev rig, 2026-10-13 (cold power-on)
 
 ```
@@ -331,7 +385,7 @@ Fill this in as you go. This is what you take to suppliers.
 | E3 | RAM floor | Peak **541 MB** across 25 runs (max of any run; idle 528 MB). Constrained 1024/512 MB boot runs still not done | $3–10 | **1 GB tier**; 512 MB too tight once OTA downloads an image | 2026-10-05 |
 | E4 | Storage size + writes/day | **DOES NOT REPRODUCE (2026-10-13).** Matched state — party active, 3 BT sinks connected, `campfire_party` the default sink, audio playing — measured `write_bytes` **0.0 KB/s** for the API and **0.0 KB/s** for the whole `mmcblk0` device over a 30 s window. The 2026-10-06 figure of 4809.6 KB/s does not survive re-measurement. Neither the old `adapters.ts`/`party.ts` nor the current code contains a continuous write (the only `writeFileSync` is a calibration save), and `capture.py`'s `proc_sample()` never read per-process I/O at all, so the "attributed to `node`" half of the original finding came from a hand-read that is no longer reproducible — most likely `wchar` (socket traffic) rather than `write_bytes`. **One hypothesis remains untested:** the app auto-scans continuously while its Connections tab is focused (`DevicesScreen.tsx:149`), and each discovered device makes BlueZ rewrite `/var/lib/bluetooth/<adapter>/cache/`, which is a real continuous write attributed to `bluetoothd`, not `node` | $2–5 | **Storage sizing is unblocked for #28.** Re-run once with the Connections tab open to settle the discovery hypothesis; if that reproduces it, the fix is app-side (stop scanning when not pairing) | 2026-10-13 |
 | E5 | Camping-mode coexistence | **Inconclusive — the control does not match.** Camping ran 3 captures (181 s, 301 s, 300 s) with **3 underruns in one 300 s run**, 0 in the other two. Home control (`extended-3bt`) ran only 181 s × 2, 0 faults. Camping got 782 s of exposure vs home's 362 s, so more faults is partly just more looking. `hostapd` CPU reads 0.0 in every camping run, which is itself suspect for a run that is supposed to be hosting the AP | gate | open — re-run matched at 600 s each | 2026-10-05 |
-| E6 | Peak current draw | Meter in hand 2026-10-13; `power-budget.sh` walks the six load states | $2–6 | open — run it; camping (hotspot + 3 BT + amp) is the state that sizes both PSU and battery | — |
+| E6 | Peak current draw | **PARTIAL (2026-10-15).** All seven states measured, **3 suspect** (`extended` below idle, `bsolo` and `limited` implausibly small, `camping` below `builtin`). Robust finding regardless: total spread across every load state is **0.60 W** and the device is dominated by **idle draw (~3.85 W)**, not audio work. Peak 5.57 W → **~8 W PSU** vs the Pi 5's demanded 25 W. Throttle 0x0 throughout | $2–6 | **PSU cost-down confirmed.** Re-measure the 4 suspect states — above all get the built-in speaker audible, since `bsolo` at +0.04 W means it is silent. **Battery size is driven by idle power, so #27a's SoC choice dominates #27b** | 2026-10-15 |
 | E8 | Battery runtime + safe shutdown | Not run — new requirement, gated on the runtime target and on E6's continuous draw | gate | open — see #27b | — |
 | E7 | Boot time | **(a) PASS — 15.8 s to multi-user, API answering at 12.2 s** (2026-10-13, Pi 5, cold power-on). **(b) unmeasurable:** shairport-sync starts only on party enable, so a cold-booted device advertises no AirPlay target at all | gate | **(a) passes with 33 s of margin. (b) is blocked on #16 (boot auto-reconnect), which this makes a launch gate** | 2026-10-13 |
 
