@@ -410,6 +410,159 @@ until this number exists.
 unnecessary** — a battery removes the common case of unclean power-off, but not
 a depleted pack, a failed cell, or a user pulling the battery.
 
+### MVP Prototype & Plan Package (added 2026-10-17)
+
+**Goal:** the first unit built without the Pi 5 single-board computer, plus the
+"plan package" that unit makes possible: (1) a costed BOM and per-unit
+economics, (2) an FCC-lab-ready submission set, (3) an invention disclosure for
+patent counsel.
+
+**What "without the Raspberry Pi" means here (framing decided 2026-10-17,
+revisit only if asked):** the MVP is a **System-on-Module on a custom carrier
+board**, not a ground-up SoC design. The SoM carries the SoC, RAM, eMMC and a
+WiFi/BT radio with an FCC *modular* grant — the parts that would cost $50–150k
+of NRE and a full intentional-radiator test if done from scratch. The carrier is
+a 4-layer PCB we own: SoM connector, USB hub, 1 or 3 Bluetooth radio modules,
+I²S amp, charger + fuel gauge, USB-C, button, LED. A Raspberry Pi **CM4** is the
+lowest-risk SoM because the software stack moves unchanged and its idle draw is
+roughly half the Pi 5's (the number that sizes the pack); CM5 is the fallback if
+CM4 fails the acceptance run. A non-Pi SoM is a batch-2 cost-down, not the MVP.
+
+#### MVP scope (feature cut)
+
+| In | Out (post-MVP) |
+|---|---|
+| AirPlay 2 receiver (iOS) | Cast / Android — see Known Issue #10 on licensing |
+| Built-in speaker + 1 (Limited) or 3 (Extended) BT speakers in sync | — |
+| Home mode (mDNS) + Camping mode (hotspot), auto-switch | Remote mode / cloud relay (#15) |
+| Hotspot-based WiFi provisioning + forced hotspot-password change | BLE provisioning (#11), accounts (#7/#12) |
+| Battery, charge-while-playing, safe shutdown, one button, RGB LED | — |
+| Boot auto-reconnect + AirPlay available on boot (#16, launch gate) | OTA agent (#21/#22) — manual update path for the beta batch |
+| **One PCB, two population variants** (Extended fully populated; Limited depopulated) | Injection-molded enclosure (3D-printed for EVT/DVT) |
+
+#### Proposed EVT block diagram (first draft — #27d finalises it)
+
+```mermaid
+flowchart LR
+  USBC[USB-C 5V in] --> CHG[Charger + power path]
+  PACK[(1SxP Li-ion pack + BMS)] <--> CHG
+  CHG --> BOOST[5V boost] --> SOM[SoM: SoC · RAM · eMMC · WiFi/BT modular]
+  PACK --- GAUGE[Fuel gauge] -- I2C --> SOM
+  SOM -- USB 2.0 --> HUB[USB hub]
+  HUB --> BTA[BT radio A, class 1] --> ANTA((antenna N))
+  HUB --> BTB[BT radio B, class 1] --> ANTB((antenna SE))
+  HUB --> BTC[BT radio C, class 1] --> ANTC((antenna SW))
+  SOM -- I2S --> AMP[MAX98357A] --> SPK[Driver]
+  SOM -- GPIO --> BTN[Button] & LED[RGB LED]
+  SOM -. WiFi AP / client .-> PHONE[Phone: AirPlay + app]
+```
+
+#### Stages
+
+| Stage | What | Exit criterion | Est. |
+|---|---|---|---|
+| **0 — Close decisions + measurements** (#27a, #27b, #27c) | Runtime target. Wire the MAX98357A, make the built-in speaker audible, re-run E6's suspect states (= E1). E5 matched 600 s re-run. E2 at 300 s with adapter logging. **Candidate SoM acceptance run:** CM4 on the official IO board — `dsp_bench`, E5, E6 `idle`, E7. | Every E-row in `EXPERIMENTS.md` has a non-suspect result; SoM chosen on measured idle draw + `dsp_bench` + E5 | 2–3 wks, <$150 of parts |
+| **1 — Architecture lock + EVT design** (#27d, #27e) | System block diagram. Part selection with FCC IDs, lifecycle and stock. Carrier schematic + 4-layer layout (KiCad; Raspberry Pi publishes the CM4 IO board design files to crib from). Enclosure CAD with radios at N/SE/SW, driver, battery bay, port, button, LED. Reproducible SoM firmware image (pi-gen / rpi-image-gen from `setup-pi.sh`, read-only root, device tree for amp + hub). DFM + RF-keepout review. | Gerbers + BOM + enclosure STLs ordered: 5 PCBs, 3 assembled, 3 enclosures | 4–6 wks |
+| **2 — EVT bring-up + validation** (#27f) | Rails, boot, hub enumeration, each radio as `hciX`, I²S audio, gauge, button/LED. Re-run E1/E2/E5/E6 (all states)/E7/E8 **on the EVT**. Party-distance range test. Pre-compliance EMI scan (near-field probe, or a lab pre-scan day). | Experiment suite passes on the EVT; fix list closed or scheduled for EVT-2 (budget one re-spin) | 3–4 wks (+2–3 for a re-spin) |
+| **3 — Plan package** (#27g) | Costed BOM at 1/50/500 + NRE + landed cost + margin. FCC submission set. Invention disclosure. Starts in Stage 1, finalised with EVT numbers. | Three documents delivered; #28 buys against them; lab and counsel work from real artefacts | overlaps |
+| **4 — DVT / beta build** | 20–50 units on the final PCB, molded or final-printed enclosure, formal FCC test on DVT units, pack with transport certs, labels. | Gates #33 | after MVP |
+
+**Calendar:** roughly **3–4 months** from today to a validated EVT with the plan
+package if the carrier is designed in-house. Outsourcing the carrier ($5–20k)
+barely shortens the calendar but removes the biggest skill risk — the carrier
+schematic and layout is the one step with no equivalent in the work done so far.
+
+#### The three purposes do not all wait for the prototype
+
+| Purpose | Do now | Needs the EVT |
+|---|---|---|
+| **Economics** | First-order cost model (below) from the current BOM; the three lines that dominate are the SoM, the radios and the pack | Quotes replace estimates after architecture lock; PCBA and enclosure quotes need the design files |
+| **FCC lab** | Pick a lab, get a quote, ask the two questions under "FCC package", book a pre-scan | Everything else in the package — samples, schematics, BOM with FCC IDs, label art, test firmware |
+| **Patent counsel** | **Go now — the clock is running (Known Issue #9).** The disclosure can be written from the current design; a provisional does not need a prototype | Better figures, nothing more |
+
+#### Economics — first-order cost model
+
+**ESTIMATES** from public distributor pricing as of 2026-10, not quotes. Each
+line gets replaced by a quote in Stage 3; the point of the table is to show
+which lines matter.
+
+| Line | Extended @ 50 | Extended @ 500 | Note |
+|---|---|---|---|
+| SoM — CM4 1 GB / 8 GB eMMC / WiFi-BT | $40 | $35 | CM5 ~$55–60 and higher idle draw → bigger pack |
+| BT radio modules × 3 (class 1, USB or UART HCI, modular grant) | $30 | $21 | Limited: × 1 |
+| 2.4 GHz antennas + u.FL cables × 3 | $6 | $3 | Limited: × 1 |
+| USB 2.0 hub IC + passives | $3 | $2 | CM4 exposes one USB 2.0 host |
+| I²S amp (MAX98357A) | $3 | $2 | |
+| Speaker driver, 2–3″ full-range | $6 | $4 | |
+| Charger with power path + 5 V boost + fuel gauge + protection | $8 | $5 | |
+| Battery pack (1S3P 18650 with BMS, UN38.3 / IEC 62133-2 reports from the pack supplier) | $28 | $20 | sized for ~8 h at ~3 W; **the runtime target moves this line** |
+| USB-C, button, RGB LED, connectors, passives | $8 | $5 | |
+| Carrier PCB (4-layer) + assembly | $35 | $12 | |
+| Enclosure | $35 (3D-printed) | $5 + tooling | injection tooling $10–25k |
+| Wall adapter (certified, off-the-shelf — never design or test our own) | $6 | $4 | |
+| Packaging, insert, labels | $5 | $3 | |
+| Final assembly + test labour | $20 | $8 | |
+| **Extended, all-in** | **~$235** | **~$130** (+ tooling) | |
+| **Limited, all-in** (−2 radios, −2 antennas) | **~$210** | **~$115** | |
+
+**One-time (NRE) to reach a certified MVP:**
+
+| Item | Est. |
+|---|---|
+| FCC Part 15B + modular-integration testing; all radios modular → SDoC route | $4–10k. If any radio is *not* modular: +$10–20k per radio and a TCB filing — that is the 6–12 week path |
+| Pre-compliance scan day | $1–2k |
+| Battery: buy a pack that ships with UN38.3 + IEC 62133-2 reports | ~$0 (a custom pack is $5–15k and its own 6–12 weeks) |
+| Carrier design | DIY: time · outsourced: $5–20k |
+| EVT PCB spins (2 × 5 boards, assembled) | $1–2k |
+| Enclosure CAD + prints | $0.5–2k |
+| Patent: provisional with counsel | $2–5k (non-provisional later: $10–20k) |
+| LLC (#2) | $0.1–0.8k |
+| Dev hardware (CM4 + IO board, modules, meters) | $0.3–0.5k |
+| **Total** | **~$15–30k DIY · ~$25–50k outsourced** |
+
+At a 50-unit beta, NRE is **$300–1,000 per unit on top of the ~$235 BOM**. The
+economics are set by NRE and volume, not by shaving the BOM — that is the number
+to understand before pricing anything.
+
+#### FCC package (what the lab asks for)
+
+- 2–3 production-representative samples, with a way to put every radio into
+  max-duty transmit and to hold the worst-case operating mode (hotspot + 3 BT
+  streaming + built-in at full volume + charging): a test firmware or mode.
+- System block diagram, schematics, PCB layout, BOM listing every radio's FCC ID
+  and grant type (**modular**), each antenna's datasheet and gain.
+- Label artwork: "Contains FCC ID: …" per module; the Part 15 statement in the
+  draft user manual.
+- **Two questions for the first call:** (1) does the SoM's wireless and each BT
+  module carry a *modular* grant whose conditions (antenna type and gain,
+  integration instructions) we meet? (2) how will they treat **four radios
+  transmitting simultaneously in one host** (co-location / RF-exposure
+  evaluation)? This is the item most likely to add scope.
+- Decision this forces: **radio modules with modular grants, not consumer USB
+  dongles.** A dongle's FCC ID as a stand-alone device does not transfer to a
+  host product unless the dongle itself was granted as a module. Ask the lab
+  before assuming any dongle qualifies.
+- Depopulated Limited variant: ask whether testing the fully-populated Extended
+  covers it as the worst case (usually yes) or needs a variant declaration.
+
+#### Invention disclosure (what patent counsel asks for)
+
+- Problem, what exists, what is new, how it works, with figures: the block
+  diagram and the party-sink / per-speaker latency-calibration method.
+  Candidate novel points: one receiver fanning out to heterogeneous consumer BT
+  speakers in sync via per-link calibrated loopbacks; one radio per speaker at
+  the enclosure extremes with app-guided orientation; automatic home/camping
+  switching; AirPlay over the device's own hotspot with no infrastructure.
+- Prior art counsel will raise, so raise it first: Bluetooth LE Audio
+  **Auracast** broadcast, Sonos, Bose SimpleSync, JBL PartyBoost, Samsung Dual
+  Audio, AmpMe, Audio Pro multi-pairing.
+- Dates: conception, first public disclosure (Known Issue #9), demos to
+  friends, any sale. Inventor list.
+- Licensing questions — not patent questions, but bring them to the same
+  meeting: AirPlay (Apple MFi; shairport-sync is unlicensed and "AirPlay" is an
+  Apple trademark), Google Cast built-in (partner program), AAC decoding patents
+  if AirPlay 2 buffered-audio paths are used. See Known Issue #10.
+
 ### Bill of Materials
 
 | Component | Limited SKU | Extended SKU | Notes |
@@ -515,8 +668,9 @@ Prerequisites always come before the things that need them.
 Items with no dependency on each other can be worked in parallel.
 When asked "what is next", Claude will present the first three `[ ]` items as options.
 
-- [ ] **#1 — Start FCC certification** — Contact a certified test lab (NTS, SGS, UL). Submit application. Runs 6–12 weeks externally. Blocks US sales. ⚠️ **CONFLICT raised 2026-10-13 by the battery requirement (#27b):** FCC tests the unit *as configured*. Adding a battery charger/PMIC later introduces a new switching supply — a new unintentional radiator — which means re-testing and paying twice. **Lock the battery decision before submitting.** Lithium cells also carry their own certification track (UN38.3 transport, IEC 62133-2 / UL 2054 pack safety) with a timeline comparable to FCC's, so start both together.
+- [ ] **#1 — Start FCC certification** — Contact a certified test lab (NTS, SGS, UL). Submit application. Runs 6–12 weeks externally. Blocks US sales. ⚠️ **CONFLICT raised 2026-10-13 by the battery requirement (#27b):** FCC tests the unit *as configured*. Adding a battery charger/PMIC later introduces a new switching supply — a new unintentional radiator — which means re-testing and paying twice. **Lock the battery decision before submitting.** Lithium cells also carry their own certification track (UN38.3 transport, IEC 62133-2 / UL 2054 pack safety) with a timeline comparable to FCC's, so start both together. **Re-sequenced 2026-10-17 by the MVP track:** engage a lab *now* (quote, pre-scan slot, the two questions under "FCC package" in Phase 2) but the submission waits for EVT samples (#27f). If every radio carries a modular grant the route is Part 15B + SDoC — weeks of lab time, not 6–12 weeks; buy the pack with its certs instead of certifying one.
 - [ ] **#2 — Form LLC** — Must happen before taking any money. Online filing in most states, same-day possible.
+- [ ] **#2a — Patent counsel consult + provisional filing** *(new 2026-10-17, time-sensitive)* — Write the invention disclosure from the current design (see "Invention disclosure" in Phase 2), establish the date the repo went public, see counsel, file a provisional. No prerequisites and **does not wait for the prototype** — see Known Issue #9. Bring the AirPlay/Cast licensing questions (Known Issue #10) to the same meeting.
 - [x] **#3 — Remove librespot from bridge** *(⚡ quickest win)* — Delete librespot systemd service, `bridge/config/librespot.env`, `bridge/systemd/librespot.service`, librespot API routes. ~30 min.
 - [x] **#4 — Remove Spotify code from app** *(⚡ quickest win)* — Delete `SpotifyContext.tsx`, `SpotifyLoginScreen.tsx`, `spotifyAuth.ts`, `spotifyClientId` from SettingsContext, Music tab Spotify UI. ~30 min.
 - [ ] **#5 — Infrastructure setup** — Register domain, set up Railway or Fly.io project, Cloudflare DNS + SSL, R2 bucket for firmware storage. Foundation for backend deployment.
@@ -546,7 +700,12 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 - [ ] **#27b — Hardware: Battery subsystem decision + characterization** *(new 2026-10-13)* — Settle the **runtime target** first; everything else follows from it. Then select cell/pack, charge controller with load sharing, and fuel gauge; wire the safe-shutdown service to a state-of-charge threshold; combine the power button with the camping/factory-reset button. Run **E8** (battery runtime, charge-while-playing peak, safe-shutdown threshold verification). **Gates #28, and should gate #1 — see the conflict note below.**
   - ⚠️ **This raises the stakes on #27a rather than lowering them.** E6 (2026-10-15) measured the device at **~3.85 W idle against a 0.60 W total spread across every load state** — audio work is ~8% of draw. So pack size is set by **idle power**, not by playing music, and the SoC choice drives pack cost, size and weight directly. At ~4 W continuous, 12 h is ~50 Wh ≈ **5 × 18650**; expect ~5–6 W once the built-in speaker is genuinely audible. The "ship a Pi 5 as-is and defer cost-down to batch 2" path is weaker once the product is battery-powered — a cooler board pays for itself twice.
   - **Good news for the PSU:** peak 5.57 W means a **~8 W supply** suffices, against the 25 W the Pi 5 negotiates over USB-PD.
-- [ ] **#28 — Hardware: BOM finalization** — Confirm all components (SBC, dongles, USB hub, DAC/amp, speaker, PSU, LED, button, enclosure) for both SKUs with suppliers and quantities. Requires characterization results (#27a) — do not commit to suppliers before the measured spec exists. Runs in parallel with all software work.
+- [ ] **#27c — Hardware: Candidate SoM acceptance run** *(new 2026-10-17)* — Buy a CM4 (1 GB / 8 GB / WiFi) + the official IO board; run `dsp_bench`, E5, E6 `idle`, E7 on it with the dongles on a hub. Decides CM4 vs CM5 on measured idle draw (sizes the pack) and audio headroom *before* any PCB money is spent. Requires the harness (#27a). <$150, one weekend.
+- [ ] **#27d — Hardware: Architecture lock** *(new 2026-10-17)* — System block diagram; part selection with FCC IDs, lifecycle and stock: SoM, BT radio modules (modular grant, class 1), antennas, hub, I²S amp, charger/boost/fuel gauge, pack, driver. Requires runtime target (#27b) + SoM choice (#27c). First artefact for both the FCC lab and patent counsel.
+- [ ] **#27e — Hardware: EVT carrier board + enclosure design** *(new 2026-10-17)* — Carrier schematic + 4-layer layout (KiCad), enclosure CAD (radios N/SE/SW, driver, battery bay, USB-C, button, LED), reproducible SoM firmware image. DFM + RF-keepout review. Order 5 PCBs / 3 assembled / 3 enclosures. Requires #27d.
+- [ ] **#27f — Hardware: EVT bring-up + validation** *(new 2026-10-17)* — Bring-up, then the full experiment suite on the EVT (E1/E2/E5/E6/E7/E8), party-distance range test, pre-compliance EMI scan. Budget one re-spin. Requires #27e. **This is the "true prototype."**
+- [ ] **#27g — Plan package** *(new 2026-10-17)* — (1) costed BOM at 1/50/500 + NRE + landed cost + margin; (2) FCC submission set; (3) invention disclosure. Starts at #27d, finalised with #27f numbers. Gates #28 and the FCC submission in #1. See "MVP Prototype & Plan Package" in Phase 2.
+- [ ] **#28 — Hardware: BOM finalization** — Confirm all components (SBC, dongles, USB hub, DAC/amp, speaker, PSU, LED, button, enclosure) for both SKUs with suppliers and quantities. Requires characterization results (#27a) and the plan package (#27g) — do not commit to suppliers before the measured spec and the costed BOM exist. Runs in parallel with all software work.
 - [ ] **#29 — Hardware: Factory provisioning jig + process** — Serial number generation script (batch by SKU), cert generation + flash script, firmware image, label printing. Requires device identity spec (#10) + BOM finalized (#28).
 - [ ] **#30 — E-commerce: Shopify store** — Limited + Extended SKU listings, payment processing, shipping. Requires LLC (#2).
 - [ ] **#31 — E-commerce: Serial number assignment workflow** — Map order fulfillment → assign serial from pre-loaded pool → print label. Requires device registry (#8) + provisioning jig (#29).
@@ -569,3 +728,5 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 | 6 | **mDNS discovery fails across WiFi bands/SSIDs.** Hit on 2026-10-13: Mac on "eagle bay 5" (5 GHz) could not resolve `campfire-bridge.local` while the Pi was on "eagle bay" (2.4 GHz); switching the Mac to the 2.4 GHz SSID fixed it instantly. Many consumer routers put band-split SSIDs on separate L2 segments, and multicast does not cross. | **High — this is the "I can't find my speaker" support ticket**, and it will hit customers with band-split or mesh networks | Open. Argues that the cloud relay (#15) is not just a remote-access feature but the discovery fallback, and that the app must say *which* network it is looking on. Device should prefer 5 GHz at home anyway (see Known Issue #7). |
 | 7 | **2.4 GHz home WiFi competes with the Bluetooth radios.** The product's own BT links and its WiFi uplink share the band; `bt-afh.sh` exists to mask the WiFi channel on every adapter. On 5 GHz the conflict disappears and the dongles get the whole 2.4 GHz band. | Medium — audio quality at home | Open — **prefer 5 GHz for home mode** where the network offers it (needs a saved 5 GHz profile at higher priority). Camping mode must stay 2.4 GHz regardless: a 5 GHz-only hotspot excludes older phones, which is exactly what E5 is gating. |
 | 8 | **Unclean power-off is the normal case, not the exception.** A speaker gets unplugged, not shut down — done repeatedly during 2026-10-13 testing with no corruption, but on an SD card with an ext4 journal this is luck, not design. | Medium — field reliability, same root as Issue #0 | Open — evaluate a read-only root filesystem with a small writable overlay for the production image. Pairs with the Issue #0 write-rate work: both are about not trusting the card. |
+| 9 | **The public repo is a public disclosure, and the patent clock is running.** The multi-adapter party-mode sync — the likely patentable core — first appeared in commit `1b28e82c` dated **2026-04-21** (the 2025-09-11 snapshot was a single-speaker Spotify bridge). US law allows 12 months from the inventor's own disclosure to file; most foreign rights are lost at disclosure. If the repo was public on 2026-04-21, the US window closes **~2027-04-21**. | High — a missed date is unrecoverable | Open — **establish when the repo went public, and see counsel before the EVT, not after (#2a).** A provisional can be filed on the current design. |
+| 10 | **AirPlay and Cast are unlicensed.** shairport-sync implements AirPlay without Apple's MFi program, and "AirPlay" is an Apple trademark used in the README and the product pitch. Google Cast built-in for hardware is a partner program; open-source receivers are reverse-engineered. Whether a product can be *sold* on either name is a trademark/licensing question separate from patents. | High — goes to the product pitch | Open — bring to counsel with #2a. Options: factual compatibility wording, MFi application, drop Cast from the MVP (already out of scope). |
