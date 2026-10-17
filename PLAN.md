@@ -425,8 +425,9 @@ of NRE and a full intentional-radiator test if done from scratch. The carrier is
 a 4-layer PCB we own: SoM connector, USB hub, 1 or 3 Bluetooth radio modules,
 I²S amp, charger + fuel gauge, USB-C, button, LED. A Raspberry Pi **CM4** is the
 lowest-risk SoM because the software stack moves unchanged and its idle draw is
-roughly half the Pi 5's (the number that sizes the pack); CM5 is the fallback if
-CM4 fails the acceptance run. A non-Pi SoM is a batch-2 cost-down, not the MVP.
+roughly half the Pi 5's (the number that sizes the pack). It is the same silicon
+as the Pi 4B in the cheapest buy-and-wire BOM below, so the cheap unit *is* the
+acceptance run. A non-Pi SoM is a batch-2 cost-down, not the MVP.
 
 #### MVP scope (feature cut)
 
@@ -461,7 +462,7 @@ flowchart LR
 
 | Stage | What | Exit criterion | Est. |
 |---|---|---|---|
-| **0 — Close decisions + measurements** (#27a, #27b, #27c) | Runtime target. Wire the MAX98357A, make the built-in speaker audible, re-run E6's suspect states (= E1). E5 matched 600 s re-run. E2 at 300 s with adapter logging. **Candidate SoM acceptance run:** CM4 on the official IO board — `dsp_bench`, E5, E6 `idle`, E7. | Every E-row in `EXPERIMENTS.md` has a non-suspect result; SoM chosen on measured idle draw + `dsp_bench` + E5 | 2–3 wks, <$150 of parts |
+| **0 — Close decisions + measurements** (#27a, #27b, #27c) | Runtime target. Wire the MAX98357A in place of the USB speaker and re-run E6's suspect states (= E1). E5 matched 600 s re-run. E2 at 300 s with adapter logging. **Build the cheapest buy-and-wire unit** (Pi 4B 1 GB, ~$65–80) and run `dsp_bench`, E5, E6 `idle`, E7 on it. | Every E-row in `EXPERIMENTS.md` has a non-suspect result; the cheap unit does what the Pi 5 does | 2–3 wks, <$100 of parts |
 | **1 — Architecture lock + EVT design** (#27d, #27e) | System block diagram. Part selection with FCC IDs, lifecycle and stock. Carrier schematic + 4-layer layout (KiCad; Raspberry Pi publishes the CM4 IO board design files to crib from). Enclosure CAD with radios at N/SE/SW, driver, battery bay, port, button, LED. Reproducible SoM firmware image (pi-gen / rpi-image-gen from `setup-pi.sh`, read-only root, device tree for amp + hub). DFM + RF-keepout review. | Gerbers + BOM + enclosure STLs ordered: 5 PCBs, 3 assembled, 3 enclosures | 4–6 wks |
 | **2 — EVT bring-up + validation** (#27f) | Rails, boot, hub enumeration, each radio as `hciX`, I²S audio, gauge, button/LED. Re-run E1/E2/E5/E6 (all states)/E7/E8 **on the EVT**. Party-distance range test. Pre-compliance EMI scan (near-field probe, or a lab pre-scan day). | Experiment suite passes on the EVT; fix list closed or scheduled for EVT-2 (budget one re-spin) | 3–4 wks (+2–3 for a re-spin) |
 | **3 — Plan package** (#27g) | Costed BOM at 1/50/500 + NRE + landed cost + margin. FCC submission set. Invention disclosure. Starts in Stage 1, finalised with EVT numbers. | Three documents delivered; #28 buys against them; lab and counsel work from real artefacts | overlaps |
@@ -565,16 +566,58 @@ to understand before pricing anything.
 
 ### Bill of Materials
 
+#### Cheapest buy-and-wire BOM (2026-10-17) — does what the dev rig does today
+
+The dev rig (Pi 5 + case + active cooler + USB speaker + 3 dongles + microSD +
+27 W USB-C supply) cost roughly $130–180. This is the cheapest set of
+off-the-shelf parts that stays inside every number measured in
+`bridge/diagnostics/EXPERIMENTS.md` (1 GB RAM floor, ~1.2–1.4 GHz A76-equivalent
+spread across cores, 4 USB ports, on-board WiFi for home + hotspot). No custom
+PCB; one unit buildable today. Prices are 2026-10 estimates for one unit.
+
+| Part | Cheapest that does the job | Est. |
+|---|---|---|
+| Compute + WiFi | **Raspberry Pi 4 Model B, 1 GB** (2 GB is $45 if 1 GB is out of stock). 4× A72 @ 1.5 GHz, 1 GB, 4 USB ports, on-board WiFi. No fan at this load; a $1 heatsink in a closed box. Pi 3B+ ($35, 4× USB 2.0, lower idle draw) also fits; Pi 4 has the headroom at the same price. | $35 |
+| Bluetooth radios × 3 (Limited: × 1) | **RTL8761B USB 2.0 dongles** — BlueZ-supported on the Pi kernel, firmware in `firmware-realtek`. Plug into the two USB 2.0 ports and one USB 3 port on a short lead (USB 3 is noisy at 2.4 GHz), or cut the plugs off and solder the four wires. Spread the three boards to the corners of the box. | $12–18 |
+| Built-in speaker | **MAX98357A I²S amp** (already on hand) on the GPIO header + 4 Ω 3 W full-range driver. Hardwired; replaces the USB speaker and frees a port. | $4–8 |
+| Storage | 16 GB A1 microSD | $5 |
+| Power | 5 V 3 A USB-C supply (plain, not PD) | $6–8 |
+| Enclosure | 3D print, or a ~$5 ABS project box | $3–8 |
+| **Total, Extended** | | **$65–80** |
+| **Total, Limited** (one dongle) | | **$55–65** |
+
+Not included because the dev rig does not have it: a battery. A 2–3 × 18650
+UPS-style board with charge + 5 V out is +$20–30 if wanted.
+
+**Cheaper boards, with what they give up:**
+
+| Board | Price | Catch |
+|---|---|---|
+| Raspberry Pi Zero 2 W + bare 4-port USB 2.0 hub board + 5 V 2.5 A micro-USB supply | $15 + $3 + $6 → **unit ~$45–60** | 512 MB RAM is below the 541 MB peak measured on the Pi 5, and 1 GHz A53 cores put shairport-sync near one full core. Might run with a 32-bit image and zram. Not inside the measured numbers. |
+| Orange Pi Zero 2W 1 GB (Allwinner H618) | $20–25 → **unit ~$55–70** | Same RAM tier, ~$10 cheaper than the Pi 4. Armbian; camping-mode AP on its UWE5622 WiFi and USB BT driver quality must be proven before trusting it. Same software otherwise. |
+
+**The next cut changes the implementation, not just the parts:** cheap
+Bluetooth *audio transmitter* modules (BK3266-class, ~$3 each, analog in,
+A2DP out, pair by AT command over UART) in place of USB dongles + BlueZ A2DP
+encoding. Removes the SBC encode CPU, the hub, and most of `bluetooth.ts`. Costs:
+per-speaker latency calibration needs one audio channel per module (the Pi has
+one 2-channel I²S bus, so 3 speakers + built-in needs a 4-channel DAC), and
+pairing/scanning moves from BlueZ to AT commands. Not "what it does now" until
+rebuilt; listed because it is the real floor for a wired assembly.
+
+Below ~$50 at volume means a custom board (CM4 Lite on a carrier, dongle guts
+soldered to a hub IC) — see "MVP Prototype & Plan Package" above.
+
 | Component | Limited SKU | Extended SKU | Notes |
 |---|---|---|---|
-| SBC | Pi 5 (dev) or CM4 (production) | same | CM4 preferred for production — smaller, more reliable |
+| SBC | Pi 5 (dev rig) · **Pi 4B 1 GB** (cheapest board inside every measured number — see cheapest BOM above) | same | CM4 Lite on a carrier is the volume version of the same silicon |
 | Li-ion cell / pack | TBD | TBD | **Blocked on the runtime target** (see Battery & Safe Shutdown). Capacity drives cost, size and weight. |
 | Charge controller / PMIC | 1 | 1 | Must support load sharing — run while charging |
 | Fuel gauge | 1 | 1 | I²C state-of-charge, e.g. MAX17048. Drives the safe-shutdown threshold. |
 | Power button | 1 | 1 | Same physical button as camping toggle / factory reset |
 | External BT radios (USB dongle or module) | 1 | 3 | Class 1 with a real antenna; one per speaker; placed per **Radio Layout** above. Must be confirmed compatible with PulseAudio BT sink |
-| USB audio adapter | 1 | 1 | UAC1 class-compliant (e.g. Sabrent AU-EMAC); drives built-in speaker via amp board |
-| Class D amp board | Yes | Yes | PAM8403 (2×3W, 5V); between USB audio adapter line out and speaker driver |
+| ~~USB audio adapter~~ | — | — | Removed 2026-10-17: the dev rig uses a USB speaker; the product hardwires an I²S amp instead |
+| I²S amp | 1 | 1 | MAX98357A on the GPIO header (I²S DAC + 3 W class-D in one part); replaces USB speaker / USB adapter + PAM8403 |
 | Built-in speaker driver | Yes | Yes | 4Ω 3W full-range, ~2–3" (e.g. Adafruit #1314); mounted in enclosure |
 | Powered USB hub | Not needed | Not needed | Pi 5 has 4 USB ports; 3 BT dongles + 1 USB audio adapter = 4 exactly |
 | Power supply | Sized for load | Sized for load | Extended needs more headroom |
@@ -700,7 +743,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 - [ ] **#27b — Hardware: Battery subsystem decision + characterization** *(new 2026-10-13)* — Settle the **runtime target** first; everything else follows from it. Then select cell/pack, charge controller with load sharing, and fuel gauge; wire the safe-shutdown service to a state-of-charge threshold; combine the power button with the camping/factory-reset button. Run **E8** (battery runtime, charge-while-playing peak, safe-shutdown threshold verification). **Gates #28, and should gate #1 — see the conflict note below.**
   - ⚠️ **This raises the stakes on #27a rather than lowering them.** E6 (2026-10-15) measured the device at **~3.85 W idle against a 0.60 W total spread across every load state** — audio work is ~8% of draw. So pack size is set by **idle power**, not by playing music, and the SoC choice drives pack cost, size and weight directly. At ~4 W continuous, 12 h is ~50 Wh ≈ **5 × 18650**; expect ~5–6 W once the built-in speaker is genuinely audible. The "ship a Pi 5 as-is and defer cost-down to batch 2" path is weaker once the product is battery-powered — a cooler board pays for itself twice.
   - **Good news for the PSU:** peak 5.57 W means a **~8 W supply** suffices, against the 25 W the Pi 5 negotiates over USB-PD.
-- [ ] **#27c — Hardware: Candidate SoM acceptance run** *(new 2026-10-17)* — Buy a CM4 (1 GB / 8 GB / WiFi) + the official IO board; run `dsp_bench`, E5, E6 `idle`, E7 on it with the dongles on a hub. Decides CM4 vs CM5 on measured idle draw (sizes the pack) and audio headroom *before* any PCB money is spent. Requires the harness (#27a). <$150, one weekend.
+- [ ] **#27c — Hardware: Build the cheapest buy-and-wire unit + acceptance run** *(new 2026-10-17)* — Build one unit from the "Cheapest buy-and-wire BOM" (Pi 4B 1 GB, 3 RTL8761B dongles, MAX98357A + driver, ~$65–80), flash it from `setup-pi.sh`, and run `dsp_bench`, E5, E6 `idle`, E7 on it. This is the first unit cheaper than the Pi 5 rig and it decides the silicon (BCM2711 = CM4) on measured numbers before any PCB money is spent. Requires the harness (#27a).
 - [ ] **#27d — Hardware: Architecture lock** *(new 2026-10-17)* — System block diagram; part selection with FCC IDs, lifecycle and stock: SoM, BT radio modules (modular grant, class 1), antennas, hub, I²S amp, charger/boost/fuel gauge, pack, driver. Requires runtime target (#27b) + SoM choice (#27c). First artefact for both the FCC lab and patent counsel.
 - [ ] **#27e — Hardware: EVT carrier board + enclosure design** *(new 2026-10-17)* — Carrier schematic + 4-layer layout (KiCad), enclosure CAD (radios N/SE/SW, driver, battery bay, USB-C, button, LED), reproducible SoM firmware image. DFM + RF-keepout review. Order 5 PCBs / 3 assembled / 3 enclosures. Requires #27d.
 - [ ] **#27f — Hardware: EVT bring-up + validation** *(new 2026-10-17)* — Bring-up, then the full experiment suite on the EVT (E1/E2/E5/E6/E7/E8), party-distance range test, pre-compliance EMI scan. Budget one re-spin. Requires #27e. **This is the "true prototype."**
