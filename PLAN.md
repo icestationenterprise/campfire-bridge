@@ -486,7 +486,15 @@ schematic and layout is the one step with no equivalent in the work done so far.
 |---|---|---|
 | **Extended** (CM4 Lite 1 GB, 3 soldered BT modules, MAX98357A + driver, 1S3P 18650 pack, charger/boost/gauge/latch, 4-layer PCBA, enclosure, packaging, assembly + test) | **~$148** | **~$95** + tooling |
 | **Limited** (−2 modules, −2 antennas) | **~$135** | **~$86** + tooling |
+| **Extended, parts only — you assemble** (same board, FDM print or project box, no packaging, no labour) | **~$110** | **~$80** |
+| **Limited, parts only — you assemble** | **~$97** | **~$72** |
 | Bench unit for comparison (Pi 4B + dongles + cheap battery, "Cheapest buy-and-wire BOM") | $80–100 | — |
+
+What separates the $80–100 bench unit from the ~$110 finished unit is only the
+custom PCB (~$15) and doing the battery electronics properly (~$8 vs a $3
+power-bank board). What separates ~$110 from ~$148 is contract assembly ($12),
+retail packaging ($4) and a service-printed enclosure ($20 vs $5). The
+electronics core — compute, radios, audio — is ~$55–60 in every version.
 
 Estimates from 2026-10 distributor pricing, not quotes. The compute module is a
 third of the cost at 1000; the radios as soldered modules cost $2–4 less each

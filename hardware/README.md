@@ -73,8 +73,10 @@ size; replace with quotes.
 | | Screws, foam, thermal pad, speaker gasket | — | $2 | $1 | |
 | Box | Packaging, insert, labels | 1 | $4 | $2.5 | |
 | Labour | Final assembly + functional test | — | $12 | $6 | |
-| **Extended total** | | | **~$148** | **~$95** | plus tooling at 1000 |
-| **Limited total** | −2 modules, −2 antennas | | **~$135** | **~$86** | |
+| **Extended total, contract-assembled** | | | **~$148** | **~$95** | plus tooling at 1000 |
+| **Limited total, contract-assembled** | −2 modules, −2 antennas | | **~$135** | **~$86** | |
+| **Extended, parts only — you assemble**, FDM-printed or project box, no retail packaging | | | **~$110** | **~$80** | drops the labour, packaging and service-printed enclosure lines; the first 5 boards run ~$130–140 each because fab setup fees dominate |
+| **Limited, parts only — you assemble** | | | **~$97** | **~$72** | |
 
 The compute module is a third of the cost at 1000 units. The next product-level
 cut is replacing the CM4 with an Allwinner H618-class core board (~$12) or an
