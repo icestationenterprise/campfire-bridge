@@ -401,10 +401,9 @@ incoherent; this resolves that.
 | Power button | Combine with the camping-mode / factory-reset button already required (Known Issue #4) — one button, press patterns |
 | Safe-shutdown service | Fuel gauge below threshold → `systemctl poweroff`. Firmware work, small. |
 
-**Open question that blocks the BOM: what is the runtime target?** 4 hours and 12
-hours are different products — roughly 1 vs 3–4 18650 cells, and a meaningful
-step in enclosure size, weight and cost. Nothing downstream can be specified
-until this number exists.
+**Runtime target — default set 2026-10-17: ~8 h playing on a 1S3P 18650 pack
+(~32 Wh).** Changing it is one line in the BOM (2P ≈ 5 h, 4P ≈ 10 h); it does
+not block anything else.
 
 **This also makes read-only rootfs (Known Issue #8) lower priority rather than
 unnecessary** — a battery removes the common case of unclean power-off, but not
@@ -441,7 +440,7 @@ acceptance run. A non-Pi SoM is a batch-2 cost-down, not the MVP.
 | Boot auto-reconnect + AirPlay available on boot (#16, launch gate) | OTA agent (#21/#22) — manual update path for the beta batch |
 | **One PCB, two population variants** (Extended fully populated; Limited depopulated) | Injection-molded enclosure (3D-printed for EVT/DVT) |
 
-#### Proposed EVT block diagram (first draft — #27d finalises it)
+#### Proposed EVT block diagram (superseded 2026-10-17 by `hardware/README.md`, which has the finished-product block diagram, parts, power tree and CM4 pin map)
 
 ```mermaid
 flowchart LR
@@ -481,30 +480,18 @@ schematic and layout is the one step with no equivalent in the work done so far.
 | **FCC lab** | Pick a lab, get a quote, ask the two questions under "FCC package", book a pre-scan | Everything else in the package — samples, schematics, BOM with FCC IDs, label art, test firmware |
 | **Patent counsel** | **Go now — the clock is running (Known Issue #9).** The disclosure can be written from the current design; a provisional does not need a prototype | Better figures, nothing more |
 
-#### Economics — first-order cost model
+#### Economics — finished product, one PCB (line items in `hardware/README.md`)
 
-**ESTIMATES** from public distributor pricing as of 2026-10, not quotes. Each
-line gets replaced by a quote in Stage 3; the point of the table is to show
-which lines matter.
+| | @ 100 units | @ 1000 units |
+|---|---|---|
+| **Extended** (CM4 Lite 1 GB, 3 soldered BT modules, MAX98357A + driver, 1S3P 18650 pack, charger/boost/gauge/latch, 4-layer PCBA, enclosure, packaging, assembly + test) | **~$148** | **~$95** + tooling |
+| **Limited** (−2 modules, −2 antennas) | **~$135** | **~$86** + tooling |
+| Bench unit for comparison (Pi 4B + dongles + cheap battery, "Cheapest buy-and-wire BOM") | $80–100 | — |
 
-| Line | Extended @ 50 | Extended @ 500 | Note |
-|---|---|---|---|
-| SoM — CM4 1 GB / 8 GB eMMC / WiFi-BT | $40 | $35 | CM5 ~$55–60 and higher idle draw → bigger pack |
-| BT radio modules × 3 (class 1, USB or UART HCI, modular grant) | $30 | $21 | Limited: × 1 |
-| 2.4 GHz antennas + u.FL cables × 3 | $6 | $3 | Limited: × 1 |
-| USB 2.0 hub IC + passives | $3 | $2 | CM4 exposes one USB 2.0 host |
-| I²S amp (MAX98357A) | $3 | $2 | |
-| Speaker driver, 2–3″ full-range | $6 | $4 | |
-| Charger with power path + 5 V boost + fuel gauge + protection | $8 | $5 | |
-| Battery pack (1S3P 18650 with BMS, UN38.3 / IEC 62133-2 reports from the pack supplier) | $28 | $20 | sized for ~8 h at ~3 W; **the runtime target moves this line** |
-| USB-C, button, RGB LED, connectors, passives | $8 | $5 | |
-| Carrier PCB (4-layer) + assembly | $35 | $12 | |
-| Enclosure | $35 (3D-printed) | $5 + tooling | injection tooling $10–25k |
-| Wall adapter (certified, off-the-shelf — never design or test our own) | $6 | $4 | |
-| Packaging, insert, labels | $5 | $3 | |
-| Final assembly + test labour | $20 | $8 | |
-| **Extended, all-in** | **~$235** | **~$130** (+ tooling) | |
-| **Limited, all-in** (−2 radios, −2 antennas) | **~$210** | **~$115** | |
+Estimates from 2026-10 distributor pricing, not quotes. The compute module is a
+third of the cost at 1000; the radios as soldered modules cost $2–4 less each
+than dongles and keep certification at the Part 15B end (see "Dongle vs module
+vs chip" in `hardware/README.md`).
 
 **One-time (NRE) to reach a certified MVP:**
 
@@ -521,9 +508,9 @@ which lines matter.
 | Dev hardware (CM4 + IO board, modules, meters) | $0.3–0.5k |
 | **Total** | **~$15–30k DIY · ~$25–50k outsourced** |
 
-At a 50-unit beta, NRE is **$300–1,000 per unit on top of the ~$235 BOM**. The
-economics are set by NRE and volume, not by shaving the BOM — that is the number
-to understand before pricing anything.
+At a 100-unit first run, NRE is **$150–500 per unit on top of the ~$148 BOM**.
+The economics are set by NRE and volume, not by shaving the BOM — that is the
+number to understand before pricing anything.
 
 #### FCC package (what the lab asks for)
 
@@ -583,11 +570,13 @@ PCB; one unit buildable today. Prices are 2026-10 estimates for one unit.
 | Storage | 16 GB A1 microSD | $5 |
 | Power | 5 V 3 A USB-C supply (plain, not PD) | $6–8 |
 | Enclosure | 3D print, or a ~$5 ABS project box | $3–8 |
-| **Total, Extended** | | **$65–80** |
-| **Total, Limited** (one dongle) | | **$55–65** |
+| Battery (cheap) | 3× 18650 (~3000 mAh) + holder + **IP5306 power-bank board with I²C** (charger + 5 V 2.1 A boost + coarse 25 % gauge for the shutdown threshold). ~32 Wh → ~7–8 h playing. The Pi cannot switch it off; after `poweroff` the Pi still sips ~0.5 W, which the finished board fixes with a latch. | $16–20 |
+| Battery (cleaner) | Waveshare UPS HAT for Pi 4 (2× 18650 slots, INA219 I²C monitor) + 2 cells. ~5 h. | $35–40 |
+| **Total, Extended** | with the cheap battery | **$80–100** |
+| **Total, Limited** (one dongle) | with the cheap battery | **$70–85** |
 
-Not included because the dev rig does not have it: a battery. A 2–3 × 18650
-UPS-style board with charge + 5 V out is +$20–30 if wanted.
+Runtime scales with cells: 2 × 18650 ≈ 5 h, 3 ≈ 7–8 h, 4 ≈ 10 h at ~3.5 W
+average while playing (estimate until E6 is re-run on this unit).
 
 **Cheaper boards, with what they give up:**
 
@@ -744,7 +733,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
   - ⚠️ **This raises the stakes on #27a rather than lowering them.** E6 (2026-10-15) measured the device at **~3.85 W idle against a 0.60 W total spread across every load state** — audio work is ~8% of draw. So pack size is set by **idle power**, not by playing music, and the SoC choice drives pack cost, size and weight directly. At ~4 W continuous, 12 h is ~50 Wh ≈ **5 × 18650**; expect ~5–6 W once the built-in speaker is genuinely audible. The "ship a Pi 5 as-is and defer cost-down to batch 2" path is weaker once the product is battery-powered — a cooler board pays for itself twice.
   - **Good news for the PSU:** peak 5.57 W means a **~8 W supply** suffices, against the 25 W the Pi 5 negotiates over USB-PD.
 - [ ] **#27c — Hardware: Build the cheapest buy-and-wire unit + acceptance run** *(new 2026-10-17)* — Build one unit from the "Cheapest buy-and-wire BOM" (Pi 4B 1 GB, 3 RTL8761B dongles, MAX98357A + driver, ~$65–80), flash it from `setup-pi.sh`, and run `dsp_bench`, E5, E6 `idle`, E7 on it. This is the first unit cheaper than the Pi 5 rig and it decides the silicon (BCM2711 = CM4) on measured numbers before any PCB money is spent. Requires the harness (#27a).
-- [ ] **#27d — Hardware: Architecture lock** *(new 2026-10-17)* — System block diagram; part selection with FCC IDs, lifecycle and stock: SoM, BT radio modules (modular grant, class 1), antennas, hub, I²S amp, charger/boost/fuel gauge, pack, driver. Requires runtime target (#27b) + SoM choice (#27c). First artefact for both the FCC lab and patent counsel.
+- [~] **#27d — Hardware: Architecture lock** *(new 2026-10-17)* — `hardware/README.md` rev A is the block diagram, parts list, power tree and CM4 pin map (CM4 Lite 1 GB; 3 soldered USB-HCI BT modules with modular grants; MAX98357A; 1S3P 18650 ≈ 8 h; charger/boost/gauge/latch). Remaining: pick the exact module and charger part numbers against LCSC stock and confirm their FCC IDs. First artefact for both the FCC lab and patent counsel.
 - [ ] **#27e — Hardware: EVT carrier board + enclosure design** *(new 2026-10-17)* — Carrier schematic + 4-layer layout (KiCad), enclosure CAD (radios N/SE/SW, driver, battery bay, USB-C, button, LED), reproducible SoM firmware image. DFM + RF-keepout review. Order 5 PCBs / 3 assembled / 3 enclosures. Requires #27d.
 - [ ] **#27f — Hardware: EVT bring-up + validation** *(new 2026-10-17)* — Bring-up, then the full experiment suite on the EVT (E1/E2/E5/E6/E7/E8), party-distance range test, pre-compliance EMI scan. Budget one re-spin. Requires #27e. **This is the "true prototype."**
 - [ ] **#27g — Plan package** *(new 2026-10-17)* — (1) costed BOM at 1/50/500 + NRE + landed cost + margin; (2) FCC submission set; (3) invention disclosure. Starts at #27d, finalised with #27f numbers. Gates #28 and the FCC submission in #1. See "MVP Prototype & Plan Package" in Phase 2.
