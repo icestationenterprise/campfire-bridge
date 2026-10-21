@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="660" viewBox="0 0 980 660" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <style>
+      .wall { fill: #fdfdfd; stroke: #222; stroke-width: 3; }
+      .bay  { fill: #f3f6fa; stroke: #222; stroke-width: 1.4; }
+      .ac   { fill: #eefaf0; stroke: #222; stroke-width: 1.4; }
+      .part { fill: #ffffff; stroke: #222; stroke-width: 1.4; }
+      .rad  { fill: #fff0f0; stroke: #c0392b; stroke-width: 1.6; }
+      .cell { fill: #fff6e5; stroke: #222; stroke-width: 1.4; }
+      .dim  { fill: none; stroke: #777; stroke-width: 1; }
+      .t    { fill: #222; }
+      .h    { fill: #222; font-weight: bold; font-size: 15px; }
+      .s    { fill: #555; font-size: 11px; }
+    </style>
+  </defs>
+
+  <text x="20" y="28" class="h">Campfire STANDARD / EXTENDED — enclosure layout, top view (lid removed)</text>
+  <text x="20" y="46" class="s">Outer 220 × 150 × 70 mm, PETG, 3 mm walls. Front face at the bottom of the drawing. Scale ≈ 3 px/mm. STANDARD omits radios B and C.</text>
+
+  <!-- rear panel items -->
+  <text x="300" y="78" class="s">rear face: USB-C charge · button · RGB LED · vent slots</text>
+  <rect x="300" y="85" width="60" height="10" class="part"/>
+  <rect x="370" y="85" width="14" height="10" class="part"/>
+  <rect x="392" y="85" width="14" height="10" class="part"/>
+
+  <!-- outer box 220 x 150 mm -->
+  <rect x="160" y="90" width="660" height="450" rx="10" class="wall"/>
+
+  <!-- electronics bay (rear 90 mm) -->
+  <rect x="169" y="99" width="642" height="246" class="bay"/>
+  <text x="310" y="120" class="h">Electronics bay</text>
+
+  <rect x="180" y="104" width="118" height="40" class="rad"/>
+  <text x="188" y="121" class="t">Radio C (BT851)</text>
+  <text x="188" y="137" class="s">rear-left corner</text>
+
+  <rect x="455" y="104" width="210" height="34" class="cell"/>
+  <text x="463" y="126" class="t">2 × 18650 in the UPS holder</text>
+
+  <rect x="690" y="104" width="118" height="40" class="rad"/>
+  <text x="698" y="121" class="t">Radio B (BT851)</text>
+  <text x="698" y="137" class="s">rear-right corner</text>
+
+  <text x="180" y="165" class="s">Radios at the three extremes</text>
+  <text x="180" y="181" class="s">(N / SE / SW as a map), far from</text>
+  <text x="180" y="197" class="s">each other and from the Pi's WiFi</text>
+  <text x="180" y="213" class="s">antenna (top-left of the Pi).</text>
+  <text x="180" y="229" class="s">20 cm extensions reach B and C;</text>
+  <text x="180" y="245" class="s">radio A plugs in directly.</text>
+
+  <text x="180" y="272" class="s">MAX98357A on the divider wall,</text>
+  <text x="180" y="288" class="s">leads through a sealed grommet.</text>
+
+  <!-- Pi + UPS stack -->
+  <rect x="400" y="150" width="255" height="140" rx="4" class="part"/>
+  <text x="410" y="170" class="t">Raspberry Pi 4B on top</text>
+  <text x="410" y="186" class="t">UPS board underneath (standoffs)</text>
+  <text x="410" y="204" class="s">heatsink on the SoC, 10 mm gap to the lid</text>
+  <text x="410" y="220" class="s">USB ports face the rear</text>
+  <rect x="410" y="236" width="60" height="22" class="part"/>
+  <text x="414" y="252" class="s">USB2 A</text>
+  <rect x="480" y="236" width="60" height="22" class="part"/>
+  <text x="484" y="252" class="s">USB2 B</text>
+  <rect x="550" y="236" width="60" height="22" class="part"/>
+  <text x="554" y="252" class="s">USB3 C</text>
+
+  <rect x="430" y="296" width="130" height="40" class="rad"/>
+  <text x="438" y="313" class="t">Radio A (BT851)</text>
+  <text x="438" y="329" class="s">front-centre of the bay</text>
+
+  <!-- acoustic chamber (front 60 mm) -->
+  <rect x="169" y="351" width="642" height="180" class="ac"/>
+  <text x="180" y="372" class="h">Sealed acoustic chamber · ~0.4 L</text>
+  <text x="180" y="388" class="s">3 mm divider wall, gasketed; only the speaker leads pass through, via a sealed grommet</text>
+
+  <circle cx="420" cy="470" r="36" class="part"/>
+  <text x="392" y="466" class="t">2-inch</text>
+  <text x="392" y="482" class="t">driver</text>
+  <circle cx="580" cy="470" r="42" class="part"/>
+  <text x="548" y="466" class="t">passive</text>
+  <text x="548" y="482" class="t">radiator</text>
+  <text x="180" y="524" class="s">driver and passive radiator on the front face · foam gaskets · grille outside</text>
+
+  <!-- dimensions -->
+  <path d="M160 560 H 820" class="dim"/>
+  <text x="470" y="578" class="s">220 mm</text>
+  <path d="M840 90 V 540" class="dim"/>
+  <text x="848" y="320" class="s">150 mm</text>
+  <path d="M870 99 V 345" class="dim"/>
+  <text x="878" y="226" class="s">bay 90 mm</text>
+  <path d="M870 351 V 531" class="dim"/>
+  <text x="878" y="446" class="s">chamber 60 mm</text>
+
+  <text x="20" y="606" class="s">Height 70 mm: Pi + UPS stack ≈ 40 mm · 18650 Ø 18.6 mm · driver depth ≈ 25 mm.</text>
+  <text x="20" y="622" class="s">Lid screws into the four corner posts; a bead of foam tape seals the chamber lid.</text>
+  <text x="20" y="646" class="s">hardware/phase1/enclosure-layout.svg · branch lightest-certifiable-campfire · 2026-10-21</text>
+</svg>

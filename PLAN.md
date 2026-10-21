@@ -16,8 +16,9 @@ A self-contained wireless speaker product with an embedded Linux board, multiple
 
 | SKU | External BT USB Dongles | Total Output Channels |
 |---|---|---|
-| **Limited** | 1 | Built-in speaker + 1 external BT speaker |
-| **Extended** | 3 | Built-in speaker + 3 external BT speakers |
+| **STANDARD** (was Limited) | 1 | Built-in speaker + 1 external BT speaker — selling first |
+| **EXTENDED** | 3 | Built-in speaker + 3 external BT speakers — selling first |
+| **LITE** | 0 | Built-in speaker only (Flip-class acoustic design) — later |
 
 The Pi's built-in Bluetooth adapter is **disabled and unused**. All speaker outputs run through the external USB dongles exclusively.
 
@@ -336,6 +337,33 @@ firmware_releases (
 ---
 
 ## Phase 2 — Hardware Finalization (run in parallel, 8–16 weeks)
+
+### Lightest Certifiable Campfire (decided 2026-10-21 — supersedes the sections below where they differ)
+
+Branches: **`pi5-dev-rig`** = the working Pi 5 baseline, frozen.
+**`lightest-certifiable-campfire`** = all new code and steps.
+Manual: `docs/first-speaker-manual.md`. Design: `hardware/README.md`.
+Shopping list: `hardware/bom/phase1-shopping-list.md`.
+
+| Decision | Choice |
+|---|---|
+| Phone link | AirPlay 2 stays (sound segregation). Bluetooth-in "sync-only" product tabled. |
+| Phase 1 compute | **Raspberry Pi 4 Model B 1 GB** — 5 GHz, FCC Single Modular grant 2ABCB-RPI4B, same image, no port, 4 USB ports |
+| Phase 2 compute | CM4 Lite 1 GB wireless on our carrier (2ABCB-RPICM4), eMMC option |
+| Radios | Certified modules only: Ezurio BT851 (plug-in) → BT850-ST / Fn-Link 6221E-UUC (soldered). H618/RK3566 boards rejected: no modular grant |
+| Built-in | STANDARD/EXTENDED: Go class (MAX98357A + 2-inch driver + passive radiator + software EQ). LITE: Flip class (TAS5805M, 2-way, 3S) later |
+| Battery | 2 × 18650 on a UPS board with I²C gauge → safe shutdown; third cell optional |
+| Backend | none — button = credential, long press = factory reset, firmware from a static file host. Work items #5–#8, #11 (BLE), #13 (BLE wizard), #15, #19–#22 are **superseded** unless Remote mode returns |
+| Certification | Part 15B + SDoC only (~$4–10k), co-location evaluation, "Contains FCC ID" labels, Bluetooth SIG declaration (~$2.5k), UN38.3 cells. **A hand-built Phase 1 unit is certifiable and sellable**; the carrier is a cost-down |
+
+Parts, you assemble: STANDARD $84–95 / EXTENDED $96–129 (one-off with the UPS
+HAT: $175 / $220). Carrier @100: $98–105 / $110–131.
+
+Software milestones on the branch (S1–S8, each tested on the Pi 5 first):
+trim · AirPlay 2 from source + nqptp · read-only root · boot auto-start ·
+hotspot provisioning + forced password + per-unit SSID · prefer 5 GHz ·
+USB 2.0 port preference · built-in DSP chain.
+
 
 ### Hardware Characterization (must precede BOM finalization)
 
@@ -740,7 +768,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 - [ ] **#27b — Hardware: Battery subsystem decision + characterization** *(new 2026-10-13)* — Settle the **runtime target** first; everything else follows from it. Then select cell/pack, charge controller with load sharing, and fuel gauge; wire the safe-shutdown service to a state-of-charge threshold; combine the power button with the camping/factory-reset button. Run **E8** (battery runtime, charge-while-playing peak, safe-shutdown threshold verification). **Gates #28, and should gate #1 — see the conflict note below.**
   - ⚠️ **This raises the stakes on #27a rather than lowering them.** E6 (2026-10-15) measured the device at **~3.85 W idle against a 0.60 W total spread across every load state** — audio work is ~8% of draw. So pack size is set by **idle power**, not by playing music, and the SoC choice drives pack cost, size and weight directly. At ~4 W continuous, 12 h is ~50 Wh ≈ **5 × 18650**; expect ~5–6 W once the built-in speaker is genuinely audible. The "ship a Pi 5 as-is and defer cost-down to batch 2" path is weaker once the product is battery-powered — a cooler board pays for itself twice.
   - **Good news for the PSU:** peak 5.57 W means a **~8 W supply** suffices, against the 25 W the Pi 5 negotiates over USB-PD.
-- [ ] **#27c — Hardware: Build the cheapest buy-and-wire unit + acceptance run** *(new 2026-10-17)* — Build one unit from the "Cheapest buy-and-wire BOM" (Pi 4B 1 GB, 3 RTL8761B dongles, MAX98357A + driver, ~$65–80), flash it from `setup-pi.sh`, and run `dsp_bench`, E5, E6 `idle`, E7 on it. This is the first unit cheaper than the Pi 5 rig and it decides the silicon (BCM2711 = CM4) on measured numbers before any PCB money is spent. Requires the harness (#27a).
+- [~] **#27c — Hardware: Build the Pi 4B STANDARD + EXTENDED units + acceptance run** *(re-pointed 2026-10-21)* — Parts ordered per `hardware/bom/phase1-shopping-list.md`; build per `docs/first-speaker-manual.md` Steps 3–6; run `dsp_bench`, E5, E6, E7 and the 15-ft range test (BT851 vs old dongles). Requires the harness (#27a). Gates the first beta units.
 - [~] **#27d — Hardware: Architecture lock** *(new 2026-10-17)* — `hardware/README.md` rev A is the block diagram, parts list, power tree and CM4 pin map (CM4 Lite 1 GB; 3 soldered USB-HCI BT modules with modular grants; MAX98357A; 1S3P 18650 ≈ 8 h; charger/boost/gauge/latch). Remaining: pick the exact module and charger part numbers against LCSC stock and confirm their FCC IDs. First artefact for both the FCC lab and patent counsel.
 - [ ] **#27e — Hardware: EVT carrier board + enclosure design** *(new 2026-10-17)* — Carrier schematic + 4-layer layout (KiCad), enclosure CAD (radios N/SE/SW, driver, battery bay, USB-C, button, LED), reproducible SoM firmware image. DFM + RF-keepout review. Order 5 PCBs / 3 assembled / 3 enclosures. Requires #27d.
 - [ ] **#27f — Hardware: EVT bring-up + validation** *(new 2026-10-17)* — Bring-up, then the full experiment suite on the EVT (E1/E2/E5/E6/E7/E8), party-distance range test, pre-compliance EMI scan. Budget one re-spin. Requires #27e. **This is the "true prototype."**
@@ -761,7 +789,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 |---|---|---|---|
 | 0 | **Bridge API writes ~4.8 MB/s to the SD card continuously** (measured 2026-10-06). | ~~High~~ — **downgraded** | **Does not reproduce (2026-10-13).** Matched-state re-measurement (party active, 3 speakers connected, audio playing) shows `write_bytes` 0.0 KB/s for the API and 0.0 KB/s for the whole card. No continuous write exists in either the old or current code, and the original per-process attribution came from a hand-read that was probably `wchar` (sockets), not `write_bytes`. **Storage sizing for #28 is unblocked.** One loose end: re-run with the app's Connections tab open — it scans continuously (`DevicesScreen.tsx:149`) and BlueZ rewrites its device cache on every discovery, which would be a real write attributed to `bluetoothd`. Closes once that is checked. |
 | 1 | **Android offline/camping**: Cast SDK requires internet for session establishment. Android users cannot use Cast in camping mode (no internet). | Medium — Android camping users only | Evaluating: UPnP/DLNA as offline Android fallback |
-| 2 | **FCC certification timeline**: ~6–12 weeks and must be done before US sales. | High — hard blocker for launch | Not started — start immediately |
+| 2 | **FCC certification**: with every radio on a modular grant (Pi 4B 2ABCB-RPI4B, Ezurio SQGBT850) the product needs a Part 15B test + SDoC only — 2–4 weeks of lab time, ~$4–10k, no radio test. | Medium — cost and a few weeks, no longer the critical path | Engage a lab once the Phase 1 units pass acceptance (manual Step 10) |
 | 3 | **Remote relay + camping conflict**: Cloud relay requires internet. When device is in camping mode, relay is unavailable — this is expected and correct behavior. App must gracefully handle relay-unavailable state and prompt user to join device hotspot. | Low — expected behavior, needs UX handling | UX design needed |
 | 4 | **Physical button requirement**: The camping mode toggle and factory reset need a physical button on the device. Must be included in hardware design. | Low — hardware design item | Captured in BOM |
 | 5 | **Hotspot ships with a known default password.** `campfire123` is the `psk=` in the tracked `campfire-hotspot.nmconnection`, in a public repo, and is also `BRIDGE_PASS`. Anyone in WiFi range of a device still on the default can join its hotspot and reach the Bridge API. | Medium — pre-setup window only, if the forced change actually ships | **Decided 2026-10-13: keep a known default, force a change on first connect** (app-side, built during #5 infrastructure). Device must refuse to complete setup until changed. Verify this satisfies the US state IoT default-password laws (CA SB-327 / Oregon HB 2395 require either a unique per-device password *or* a forced change on first use) before selling. |

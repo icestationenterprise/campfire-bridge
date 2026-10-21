@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1140" height="720" viewBox="0 0 1140 720" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <style>
+      .box { fill: #ffffff; stroke: #222; stroke-width: 1.6; }
+      .mod { fill: #f3f6fa; stroke: #222; stroke-width: 1.6; }
+      .pwr { fill: #fff6e5; stroke: #222; stroke-width: 1.6; }
+      .ac  { fill: #eefaf0; stroke: #222; stroke-width: 1.6; }
+      .w   { fill: none; stroke: #222; stroke-width: 1.4; }
+      .pw  { fill: none; stroke: #c0392b; stroke-width: 2; }
+      .gnd { fill: none; stroke: #555; stroke-width: 1.4; stroke-dasharray: 5 3; }
+      .usb { fill: none; stroke: #1f5fbf; stroke-width: 1.8; }
+      .aco { fill: none; stroke: #2e8b57; stroke-width: 1.6; stroke-dasharray: 2 4; }
+      .t   { fill: #222; }
+      .h   { fill: #222; font-weight: bold; font-size: 15px; }
+      .s   { fill: #555; font-size: 11px; }
+      .pin { fill: #222; font-size: 11px; font-family: Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <text x="20" y="28" class="h">Campfire STANDARD / EXTENDED — Phase 1 wiring (Raspberry Pi 4 Model B)</text>
+  <text x="20" y="46" class="s">STANDARD = radio A only. EXTENDED = radios A, B, C. Red = 5 V · dashed grey = GND · black = signal · blue = USB · dotted green = acoustic coupling (no wire)</text>
+
+  <!-- UPS board -->
+  <rect x="40" y="130" width="250" height="220" rx="6" class="pwr"/>
+  <text x="52" y="152" class="h">UPS board · 2 × 18650</text>
+  <text x="52" y="168" class="s">5 V ≥ 2.5 A out · charges while running</text>
+  <text x="52" y="182" class="s">stacked under the Pi on standoffs</text>
+  <rect x="52" y="196" width="100" height="30" class="box"/>
+  <text x="58" y="215" class="s">USB-C charge in</text>
+  <text x="160" y="215" class="s">→ rear panel</text>
+  <rect x="52" y="238" width="226" height="28" class="box"/>
+  <text x="58" y="256" class="s">18650 · 18650 (3500 mAh flat top, UN38.3)</text>
+  <text x="52" y="288" class="pin">5V out  → pins 2/4</text>
+  <text x="52" y="304" class="pin">GND     → pin 6</text>
+  <text x="52" y="320" class="pin">INA219  → pins 3/5 (I²C)</text>
+  <text x="52" y="338" class="s">the gauge drives the safe-shutdown service</text>
+  <path d="M290 284 H 330" class="pw"/>
+  <path d="M290 300 H 330" class="gnd"/>
+  <path d="M290 316 H 330" class="w"/>
+
+  <!-- Raspberry Pi 4B -->
+  <rect x="330" y="90" width="325" height="500" rx="8" class="box"/>
+  <text x="345" y="112" class="h">Raspberry Pi 4 Model B · 1 GB</text>
+  <text x="345" y="128" class="s">Contains FCC ID: 2ABCB-RPI4B (modular, 2.4 + 5 GHz)</text>
+  <rect x="345" y="140" width="90" height="26" class="box"/>
+  <text x="352" y="157" class="s">USB-C 5 V in</text>
+
+  <!-- 40-pin header -->
+  <rect x="475" y="150" width="170" height="270" class="box"/>
+  <text x="483" y="166" class="s">40-pin header (physical pins)</text>
+  <text x="483" y="186" class="pin">2   5V</text>
+  <text x="483" y="202" class="pin">6   GND</text>
+  <text x="483" y="218" class="pin">12  GPIO18 BCLK</text>
+  <text x="483" y="234" class="pin">35  GPIO19 LRC</text>
+  <text x="483" y="250" class="pin">40  GPIO21 DIN</text>
+  <text x="483" y="274" class="pin">37  GPIO26 BTN</text>
+  <text x="483" y="290" class="pin">39  GND</text>
+  <text x="483" y="314" class="pin">36  GPIO16 R</text>
+  <text x="483" y="330" class="pin">33  GPIO13 G</text>
+  <text x="483" y="346" class="pin">32  GPIO12 B</text>
+  <text x="483" y="362" class="pin">34  GND</text>
+  <text x="483" y="386" class="pin">3 SDA1 · 5 SCL1</text>
+  <text x="483" y="402" class="pin">2/4 5V in · 6 GND</text>
+
+  <!-- USB ports -->
+  <rect x="345" y="480" width="60" height="30" class="box"/>
+  <text x="352" y="499" class="s">USB2 #1</text>
+  <rect x="415" y="480" width="60" height="30" class="box"/>
+  <text x="422" y="499" class="s">USB2 #2</text>
+  <rect x="485" y="480" width="60" height="30" class="box"/>
+  <text x="492" y="499" class="s">USB3 #1</text>
+  <text x="345" y="572" class="s">black = USB 2.0 (use first) · blue = USB 3.0</text>
+
+  <!-- MAX98357A -->
+  <rect x="800" y="140" width="250" height="150" rx="6" class="mod"/>
+  <text x="812" y="162" class="h">MAX98357A I²S amp</text>
+  <text x="812" y="178" class="s">3 W class-D · SD open = mono mix · GAIN open = 9 dB</text>
+  <text x="812" y="202" class="pin">VIN   ← pin 2</text>
+  <text x="812" y="218" class="pin">GND   ← pin 6</text>
+  <text x="812" y="234" class="pin">BCLK  ← pin 12</text>
+  <text x="812" y="250" class="pin">LRC   ← pin 35</text>
+  <text x="812" y="266" class="pin">DIN   ← pin 40</text>
+  <text x="975" y="266" class="pin">+   −</text>
+  <path d="M645 182 H 790 V 198 H 800" class="pw"/>
+  <path d="M645 198 H 782 V 214 H 800" class="gnd"/>
+  <path d="M645 214 H 774 V 230 H 800" class="w"/>
+  <path d="M645 230 H 766 V 246 H 800" class="w"/>
+  <path d="M645 246 H 758 V 262 H 800" class="w"/>
+
+  <!-- driver + passive radiator -->
+  <rect x="800" y="330" width="120" height="70" rx="6" class="ac"/>
+  <text x="810" y="352" class="t">2-inch driver</text>
+  <text x="810" y="368" class="s">4 Ω · 3 W</text>
+  <text x="810" y="384" class="s">front face, gasketed</text>
+  <rect x="940" y="330" width="110" height="70" rx="6" class="ac"/>
+  <text x="950" y="352" class="t">Passive radiator</text>
+  <text x="950" y="368" class="s">2.5-inch · no wires</text>
+  <text x="950" y="384" class="s">same sealed chamber</text>
+  <path d="M980 290 V 310 H 850 V 330" class="w"/>
+  <path d="M1000 290 V 318 H 862 V 330" class="w"/>
+  <text x="1008" y="314" class="s">speaker wire</text>
+  <path d="M920 365 H 940" class="aco"/>
+
+  <!-- button -->
+  <rect x="800" y="430" width="150" height="50" rx="6" class="mod"/>
+  <text x="812" y="452" class="t">Button (momentary)</text>
+  <text x="812" y="468" class="s">pin 37 ↔ pin 39</text>
+  <path d="M645 270 H 748 V 445 H 800" class="w"/>
+  <path d="M645 286 H 740 V 462 H 800" class="gnd"/>
+
+  <!-- RGB LED -->
+  <rect x="800" y="510" width="250" height="110" rx="6" class="mod"/>
+  <text x="812" y="532" class="t">RGB LED, common cathode</text>
+  <text x="812" y="552" class="pin">R ← 330 Ω ← pin 36</text>
+  <text x="812" y="568" class="pin">G ← 330 Ω ← pin 33 (PWM1)</text>
+  <text x="812" y="584" class="pin">B ← 330 Ω ← pin 32 (PWM0)</text>
+  <text x="812" y="600" class="pin">K → pin 34 GND</text>
+  <path d="M645 310 H 732 V 548 H 800" class="w"/>
+  <path d="M645 326 H 724 V 564 H 800" class="w"/>
+  <path d="M645 342 H 716 V 580 H 800" class="w"/>
+  <path d="M645 358 H 708 V 596 H 800" class="gnd"/>
+
+  <!-- radios -->
+  <rect x="40" y="390" width="250" height="240" rx="6" class="mod"/>
+  <text x="52" y="412" class="h">Bluetooth radios · Ezurio BT851</text>
+  <text x="52" y="428" class="s">Contains FCC ID: SQGBT850 (modular)</text>
+  <text x="52" y="442" class="s">+8 dBm · USB HCI · generic Linux btusb driver</text>
+  <rect x="52" y="452" width="150" height="44" class="box"/>
+  <text x="58" y="469" class="t">A — front-centre</text>
+  <text x="58" y="486" class="s">plugs straight into the port</text>
+  <rect x="52" y="504" width="150" height="44" class="box"/>
+  <text x="58" y="521" class="t">B — rear-right corner</text>
+  <text x="58" y="538" class="s">20 cm USB extension</text>
+  <rect x="52" y="556" width="150" height="44" class="box"/>
+  <text x="58" y="573" class="t">C — rear-left corner</text>
+  <text x="58" y="590" class="s">20 cm USB extension</text>
+  <text x="52" y="618" class="s">STANDARD: A only · EXTENDED: A + B + C</text>
+  <path d="M202 474 H 300 V 528 H 375 V 510" class="usb"/>
+  <path d="M202 526 H 292 V 538 H 445 V 510" class="usb"/>
+  <path d="M202 578 H 284 V 548 H 515 V 510" class="usb"/>
+
+  <!-- footer -->
+  <text x="20" y="648" class="s">Software: dtparam=i2s=on · dtoverlay=max98357a · dtparam=i2c_arm=on · set BUILTIN_SINK_NAME to the I²S sink · GPIO20 (pin 38) is PCM_DIN, leave it free.</text>
+  <text x="20" y="666" class="s">Certification: every radio carries a modular grant → the product needs a Part 15B test only. Labels: "Contains FCC ID: 2ABCB-RPI4B" + "Contains FCC ID: SQGBT850".</text>
+  <text x="20" y="700" class="s">hardware/phase1/wiring-pi4b.svg · branch lightest-certifiable-campfire · 2026-10-21</text>
+</svg>
