@@ -103,18 +103,18 @@
 
   <!-- button -->
   <rect x="800" y="430" width="150" height="50" rx="6" class="mod"/>
-  <text x="812" y="452" class="t">Button (momentary)</text>
-  <text x="812" y="468" class="s">pin 37 ↔ pin 39</text>
+  <text x="812" y="452" class="t">Mute button (momentary)</text>
+  <text x="812" y="468" class="s">pin 37 ↔ pin 39 · power button: pin 5 ↔ pin 9</text>
   <path d="M645 270 H 748 V 445 H 800" class="w"/>
   <path d="M645 286 H 740 V 462 H 800" class="gnd"/>
 
   <!-- RGB LED -->
   <rect x="800" y="510" width="250" height="110" rx="6" class="mod"/>
-  <text x="812" y="532" class="t">RGB LED, common cathode</text>
+  <text x="812" y="532" class="t">RGB LED (bench part: common anode)</text>
   <text x="812" y="552" class="pin">R ← 330 Ω ← pin 36</text>
   <text x="812" y="568" class="pin">G ← 330 Ω ← pin 33 (PWM1)</text>
   <text x="812" y="584" class="pin">B ← 330 Ω ← pin 32 (PWM0)</text>
-  <text x="812" y="600" class="pin">K → pin 34 GND</text>
+  <text x="812" y="600" class="pin">common → pin 1 (3.3 V); colours light LOW</text>
   <path d="M645 310 H 732 V 548 H 800" class="w"/>
   <path d="M645 326 H 724 V 564 H 800" class="w"/>
   <path d="M645 342 H 716 V 580 H 800" class="w"/>

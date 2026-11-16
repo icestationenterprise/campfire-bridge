@@ -49,6 +49,7 @@ app.get('/api/status', route((_req, res) => {
   const status: BridgeStatus = {
     device:       DEVICE_NAME,
     party:        party.getPartyStatus(),
+    builtin_sink: party.builtinSinkName(),
     network_mode: network.readNetworkMode(),
   };
   res.json(status);
@@ -259,6 +260,7 @@ export default app;
  * on A2DP and something sensible is the default sink.
  */
 async function recoverOnStartup(): Promise<void> {
+  await party.detectBuiltinSink();
   const adopted = await party.adoptExistingGraph();
   if (adopted) await airplay.startAirplay().catch(() => {});
 

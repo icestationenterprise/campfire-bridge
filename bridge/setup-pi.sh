@@ -1,29 +1,59 @@
 #!/bin/bash
-# Campfire Bridge — Raspberry Pi 5 Setup Script
-# Run once on a fresh Raspberry Pi OS Lite (64-bit) install.
-# Usage: curl -sL https://raw.githubusercontent.com/icestationenterprise/campfire-bridge/main/bridge/setup-pi.sh | bash
+# Campfire Bridge — Raspberry Pi setup script (Pi 4B / CM4 / Pi 5)
+#
+# Run on a fresh Raspberry Pi OS Lite (64-bit) install, as user pi:
+#   sudo apt update && sudo apt install -y git
+#   git clone -b lightest-certifiable-campfire https://github.com/icestationenterprise/campfire-bridge.git /home/pi/campfire-bridge
+#   bash /home/pi/campfire-bridge/bridge/setup-pi.sh
+#   sudo reboot
+#
+# Safe to re-run: every step checks before it changes anything.
+# Everything below was first done by hand on the Pi 4B bench unit (2026-11-08
+# to 11-16) and then folded in here so a fresh card comes up working.
 
 set -e
+
+BRANCH="${CAMPFIRE_BRANCH:-lightest-certifiable-campfire}"
+REPO=/home/pi/campfire-bridge
+CONFIG=/boot/firmware/config.txt
+# Pinned on purpose. shairport-sync master renamed --with-pa/--with-systemd, and
+# nqptp 1.2.9 speaks shared-memory version 11 while shairport-sync 4.3.7 speaks
+# 10 — the mismatch is a fatal "emergency exit" at startup.
+SHAIRPORT_TAG=4.3.7
+NQPTP_TAG=1.2.6
 
 GREEN='\033[0;32m'
 NC='\033[0m'
 step() { echo -e "\n${GREEN}▶ $1${NC}"; }
 
-step "1/9  Updating system packages"
+ensure_config_line() {   # ensure_config_line "dtoverlay=foo"
+  grep -qxF "$1" "$CONFIG" 2>/dev/null || echo "$1" | sudo tee -a "$CONFIG" > /dev/null
+}
+
+step "1/12  Updating system packages"
 sudo apt update && sudo apt upgrade -y
 
-step "2/9  Installing system dependencies"
+step "2/12  Installing system dependencies"
 sudo apt install -y \
-  git curl \
+  git curl rfkill \
   bluetooth bluez bluez-tools iw \
   pulseaudio pulseaudio-module-bluetooth \
-  shairport-sync
+  avahi-daemon \
+  python3-gpiozero
+# lgpio gives gpiozero PWM for the pulsing LED; the daemon copes without it.
+sudo apt install -y python3-lgpio 2>/dev/null || echo "python3-lgpio not available — LED will blink instead of pulse"
+# The apt shairport-sync cannot do AirPlay 2 with the nqptp we build; use source.
+if dpkg -s shairport-sync > /dev/null 2>&1; then
+  sudo apt remove -y shairport-sync
+fi
 
-step "3/9  Installing Node.js 20"
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
+step "3/12  Installing Node.js 20"
+if ! node --version 2>/dev/null | grep -q '^v20'; then
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+  sudo apt install -y nodejs
+fi
 
-step "4/9  Configuring Bluetooth"
+step "4/12  Configuring Bluetooth"
 # Always-on, always discoverable/pairable so speakers can connect
 sudo tee /etc/bluetooth/main.conf > /dev/null << 'EOF'
 [Policy]
@@ -34,50 +64,90 @@ DiscoverableTimeout = 0
 PairableTimeout = 0
 EOF
 sudo usermod -a -G bluetooth pi
+# A fresh image soft-blocks Bluetooth; AutoEnable only works after bluetoothd
+# has re-read main.conf, so unblock, then restart.
+sudo rfkill unblock bluetooth || true
 sudo systemctl enable bluetooth
 sudo systemctl restart bluetooth
 
-# Disable the Pi's built-in BT adapter — all speaker output goes through
-# USB dongles only. Must reboot to take effect.
-if ! grep -q "dtoverlay=disable-bt" /boot/firmware/config.txt 2>/dev/null; then
-  echo "dtoverlay=disable-bt" | sudo tee -a /boot/firmware/config.txt
-fi
+# Disable the Pi's built-in BT adapter — all speaker output goes through the
+# USB radios only. Takes effect at the next reboot.
+ensure_config_line "dtoverlay=disable-bt"
 sudo systemctl disable hciuart 2>/dev/null || true
 
-step "5/9  Configuring PulseAudio for Bluetooth"
+step "5/12  Configuring PulseAudio for Bluetooth"
 mkdir -p /home/pi/.config/pulse
-# Load Bluetooth modules on top of the default PulseAudio config
 tee /home/pi/.config/pulse/default.pa > /dev/null << 'EOF'
 .include /etc/pulse/default.pa
 load-module module-bluetooth-policy
 load-module module-bluetooth-discover
 EOF
 
-step "6/9  Enabling lingering user session (PulseAudio starts at boot)"
-# Without this, user systemd services don't start until someone logs in.
+step "6/12  Enabling lingering user session (PulseAudio starts at boot)"
 sudo loginctl enable-linger pi
 
-step "7/9  Cloning repo and building bridge"
-cd /home/pi
-if [ -d "campfire-bridge/.git" ]; then
-  echo "Repo already exists — pulling latest"
-  cd campfire-bridge && git pull
+step "7/12  Fetching the repo (branch: $BRANCH) and building the bridge"
+if [ -d "$REPO/.git" ]; then
+  git -C "$REPO" fetch -q origin
+  git -C "$REPO" checkout -q "$BRANCH"
+  git -C "$REPO" pull -q --ff-only origin "$BRANCH" || true
 else
-  git clone https://github.com/icestationenterprise/campfire-bridge.git
-  cd campfire-bridge
+  git clone -b "$BRANCH" https://github.com/icestationenterprise/campfire-bridge.git "$REPO"
 fi
-cd bridge/api
+cd "$REPO/bridge/api"
 npm install
 npm run build
 
-# shairport-sync outputs to PulseAudio's default sink, which the bridge API
-# points at campfire_party while party mode is active.
-sudo cp /home/pi/campfire-bridge/bridge/config/shairport-sync.conf /etc/shairport-sync.conf
+step "8/12  Building AirPlay 2 (nqptp $NQPTP_TAG + shairport-sync $SHAIRPORT_TAG from source)"
+if /usr/local/bin/shairport-sync -V 2>/dev/null | grep -q "^${SHAIRPORT_TAG}-AirPlay2"; then
+  echo "shairport-sync $SHAIRPORT_TAG with AirPlay 2 already installed"
+else
+  sudo apt install -y --no-install-recommends \
+    build-essential autoconf automake libtool libpopt-dev libconfig-dev \
+    libasound2-dev libpulse-dev libavahi-client-dev libssl-dev libsoxr-dev \
+    libplist-dev libplist-utils libsodium-dev libavutil-dev libavcodec-dev \
+    libavformat-dev uuid-dev libgcrypt-dev xxd
+  mkdir -p /home/pi/src
+  rm -rf /home/pi/src/nqptp /home/pi/src/shairport-sync
 
-step "8/9  Installing campfire-bridge as a user systemd service"
-# Running as a user service means it shares the pi user's PulseAudio session
-# automatically — no need to pass socket paths manually.
+  git clone -q --branch "$NQPTP_TAG" --depth 1 https://github.com/mikebrady/nqptp.git /home/pi/src/nqptp
+  cd /home/pi/src/nqptp
+  autoreconf -fi && ./configure --with-systemd-startup && make
+  sudo make install
+  sudo systemctl enable --now nqptp
+
+  git clone -q --branch "$SHAIRPORT_TAG" --depth 1 https://github.com/mikebrady/shairport-sync.git /home/pi/src/shairport-sync
+  cd /home/pi/src/shairport-sync
+  autoreconf -fi && ./configure --sysconfdir=/etc --with-pa --with-avahi \
+    --with-ssl=openssl --with-soxr --with-airplay-2 --with-systemd && make -j4
+  sudo make install
+  cd /home/pi
+fi
+# Output goes to PulseAudio's default sink, which the bridge API points at
+# campfire_party while party mode is active.
+sudo cp "$REPO/bridge/config/shairport-sync.conf" /etc/shairport-sync.conf
+# The bridge starts/stops AirPlay as a *user* service (systemctl --user), so it
+# shares the pi user's PulseAudio. The source build's system unit stays disabled.
+sudo systemctl disable --now shairport-sync.service 2>/dev/null || true
 mkdir -p /home/pi/.config/systemd/user
+tee /home/pi/.config/systemd/user/shairport-sync.service > /dev/null << 'EOF'
+[Unit]
+Description=Shairport Sync (AirPlay 2) for Campfire
+After=pulseaudio.service
+
+[Service]
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+ExecStart=/usr/local/bin/shairport-sync
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+EOF
+
+step "9/12  Installing campfire-bridge as a user systemd service"
+# The built-in speaker's PulseAudio sink is found at startup by its ALSA card
+# name (BUILTIN_CARD_NAME, default MAX98357A); set BUILTIN_SINK_NAME here only
+# to override that.
 tee /home/pi/.config/systemd/user/campfire-bridge.service > /dev/null << 'EOF'
 [Unit]
 Description=Campfire Bridge API
@@ -95,73 +165,64 @@ Environment=PORT=3000
 [Install]
 WantedBy=default.target
 EOF
-
 systemctl --user daemon-reload
 systemctl --user enable campfire-bridge
-systemctl --user start campfire-bridge || true
+systemctl --user restart campfire-bridge || true
 
-step "9/10  Configuring networking (WiFi power save off, camping mode)"
+step "10/12  Hardware overlays (I²S amp, I²C gauge, power button)"
+ensure_config_line "dtparam=i2s=on"
+ensure_config_line "dtoverlay=max98357a"     # built-in amp → ALSA card "MAX98357A"
+ensure_config_line "dtparam=i2c_arm=on"      # UPS HAT fuel gauge
+# Power button on GPIO3 (header pin 5) to GND: a press while running asks
+# systemd-logind for a clean shutdown; a press while halted wakes the Pi
+# (GPIO3 is the only pin the firmware watches for that).
+ensure_config_line "dtoverlay=gpio-shutdown"
 
-# The Pi's brcmfmac WiFi drops frames while power-saving. On a device whose
-# whole job is to receive a real-time audio stream that shows up as AirPlay
-# stutter and the app periodically losing the bridge. Disable it everywhere.
+step "11/12  Networking (WiFi power save off, camping mode) and the front panel"
+# The brcmfmac WiFi drops frames while power-saving — AirPlay stutter.
 sudo tee /etc/NetworkManager/conf.d/campfire-wifi-powersave.conf > /dev/null << 'EOF'
 [connection]
 # 2 = disable
 wifi.powersave = 2
 EOF
 
-# Install NetworkManager hotspot profile
-sudo cp /home/pi/campfire-bridge/bridge/config/campfire-hotspot.nmconnection \
+sudo cp "$REPO/bridge/config/campfire-hotspot.nmconnection" \
         /etc/NetworkManager/system-connections/campfire-hotspot.nmconnection
 sudo chmod 600 /etc/NetworkManager/system-connections/campfire-hotspot.nmconnection
 sudo chown root:root /etc/NetworkManager/system-connections/campfire-hotspot.nmconnection
 sudo nmcli con reload
 
-# Install camping-mode daemon and the Bluetooth channel-steering helper it calls
-sudo cp /home/pi/campfire-bridge/bridge/scripts/camping-mode.sh \
-        /usr/local/bin/campfire-camping-mode.sh
-sudo cp /home/pi/campfire-bridge/bridge/scripts/bt-afh.sh \
-        /usr/local/bin/campfire-bt-afh.sh
-sudo chmod +x /usr/local/bin/campfire-camping-mode.sh /usr/local/bin/campfire-bt-afh.sh
+sudo cp "$REPO/bridge/scripts/camping-mode.sh" /usr/local/bin/campfire-camping-mode.sh
+sudo cp "$REPO/bridge/scripts/bt-afh.sh"       /usr/local/bin/campfire-bt-afh.sh
+sudo cp "$REPO/bridge/scripts/campfire-panel.py" /usr/local/bin/campfire-panel.py
+sudo chmod +x /usr/local/bin/campfire-camping-mode.sh /usr/local/bin/campfire-bt-afh.sh /usr/local/bin/campfire-panel.py
 
-# Install and enable camping-mode systemd service (runs as root/system)
-sudo cp /home/pi/campfire-bridge/bridge/systemd/camping-mode.service \
-        /etc/systemd/system/campfire-camping-mode.service
+sudo cp "$REPO/bridge/systemd/camping-mode.service"   /etc/systemd/system/campfire-camping-mode.service
+sudo cp "$REPO/bridge/systemd/campfire-panel.service" /etc/systemd/system/campfire-panel.service
 sudo systemctl daemon-reload
-sudo systemctl enable campfire-camping-mode.service
-sudo systemctl start campfire-camping-mode.service || true
+sudo systemctl enable campfire-camping-mode.service campfire-panel.service
+sudo systemctl restart campfire-camping-mode.service || true
+sudo systemctl restart campfire-panel.service || true
 
-step "10/10  Trimming boot time (E7)"
-
+step "12/12  Trimming boot time (E7)"
 # Measured 2026-10-13 on the Pi 5: 15.8 s cold boot, bridge API answering at
-# 12.2 s. ~7.3 s of that is units this appliance has no use for, and the cost
-# grows on a slower board with slower storage — which is exactly what E7 is
-# meant to constrain. Each of these is safe on this device:
-#
-#   NetworkManager-wait-online  5.99 s  Blocks multi-user.target until the
-#                                       network is up. Nothing here needs that:
-#                                       camping-mode.sh polls link state itself
-#                                       and the API binds regardless.
-#   cloud-init                  0.70 s  Cloud provisioning. Not an appliance concern.
-#   ModemManager                0.47 s  There is no cellular modem in this product.
+# 12.2 s. ~7.3 s of that is units this appliance has no use for:
+#   NetworkManager-wait-online  5.99 s  camping-mode.sh polls link state itself
+#   cloud-init                  0.70 s  not an appliance concern
+#   ModemManager                0.47 s  no cellular modem in this product
 sudo systemctl disable --now NetworkManager-wait-online.service 2>/dev/null || true
 sudo touch /etc/cloud/cloud-init.disabled 2>/dev/null || true
 sudo systemctl disable --now ModemManager.service 2>/dev/null || true
-
-# tailscaled (0.69 s) is DELIBERATELY left running. Tailscale is out of the
-# product architecture, but on a dev rig it is still a way back in when mDNS
-# fails across WiFi bands (PLAN.md Known Issue #6). Remove it from the
-# production image, not from the bench:
-#   sudo systemctl disable --now tailscaled.service
+# tailscaled is deliberately left alone on a dev rig (a way back in when mDNS
+# fails across WiFi bands). Remove it from the production image only.
 
 echo ""
 echo "================================================"
-echo " Setup complete!"
-echo ""
-echo " Reboot now to start everything cleanly:"
+echo " Setup complete. Reboot now:"
 echo "   sudo reboot"
 echo ""
-echo " After reboot, test from your Mac:"
+echo " After reboot (from your Mac):"
 echo "   curl http://campfire-bridge.local:3000/api/status"
+echo " The LED pulses blue while booting, then turns white on home WiFi."
+echo " The iPhone's AirPlay list shows \"Campfire\" once a party is started."
 echo "================================================"

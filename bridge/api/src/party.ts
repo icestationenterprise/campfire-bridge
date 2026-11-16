@@ -30,8 +30,35 @@ import type { SpeakerState, PartyStatus } from './types';
 
 export const PARTY_SINK   = 'campfire_party';
 export const BUILTIN_ID   = 'builtin';
-/** PulseAudio sink driving the hardwired speaker. Unset → no built-in output. */
-const BUILTIN_SINK_NAME   = process.env.BUILTIN_SINK_NAME?.trim() || null;
+/**
+ * PulseAudio sink driving the hardwired speaker. Set explicitly with
+ * BUILTIN_SINK_NAME, or discovered at startup from the ALSA card name
+ * (BUILTIN_CARD_NAME, default "MAX98357A") — see detectBuiltinSink().
+ * Null → no built-in output.
+ */
+let BUILTIN_SINK_NAME: string | null = process.env.BUILTIN_SINK_NAME?.trim() || null;
+const BUILTIN_CARD_NAME   = process.env.BUILTIN_CARD_NAME?.trim() || 'MAX98357A';
+
+/** The sink currently used for the built-in speaker, or null if none. */
+export function builtinSinkName(): string | null { return BUILTIN_SINK_NAME; }
+
+/**
+ * Resolve the built-in sink by ALSA card name unless BUILTIN_SINK_NAME was set
+ * explicitly. Run once at startup before the graph is adopted; safe to re-run.
+ * The sink name differs per board (Pi 4B: alsa_output.platform-soc_sound.
+ * stereo-fallback) and never contains the codec name, which is why this exists.
+ */
+export async function detectBuiltinSink(): Promise<string | null> {
+  if (process.env.BUILTIN_SINK_NAME?.trim()) return BUILTIN_SINK_NAME;
+  const found = await pulse.findSinkByCardName(BUILTIN_CARD_NAME);
+  if (found && found !== BUILTIN_SINK_NAME) {
+    console.log(`[party] built-in sink: ${found} (ALSA card "${BUILTIN_CARD_NAME}")`);
+  } else if (!found && !BUILTIN_SINK_NAME) {
+    console.log(`[party] no built-in sink: no PulseAudio sink has alsa.card_name "${BUILTIN_CARD_NAME}"`);
+  }
+  if (found) BUILTIN_SINK_NAME = found;
+  return BUILTIN_SINK_NAME;
+}
 
 const BASE_MS             = 50;   // minimum loopback buffer PulseAudio is happy with
 const DEFAULT_LOOPBACK_MS = 150;  // starting point for an uncalibrated speaker
@@ -454,6 +481,7 @@ export function getPartyStatus(): PartyStatus {
 /** Test hook: wipe in-memory state. */
 export function _resetForTests(): void {
   stopReconcile();
+  BUILTIN_SINK_NAME = process.env.BUILTIN_SINK_NAME?.trim() || null;
   sinkModule = null;
   loops.clear();
   states.clear();

@@ -88,6 +88,30 @@ export function parseSinkLatencies(out: string): Map<string, number> {
   return result;
 }
 
+/**
+ * Find the sink backed by an ALSA card of the given name (e.g. "MAX98357A").
+ * PulseAudio names an I²S sink after the platform device
+ * ("alsa_output.platform-soc_sound.stereo-fallback"), not after the codec, so
+ * the card name is the stable way to locate the built-in amp across boards.
+ */
+export async function findSinkByCardName(cardName: string): Promise<string | null> {
+  const out = await pactl('list', 'sinks');
+  return parseSinkByCardName(out ?? '', cardName);
+}
+
+export function parseSinkByCardName(out: string, cardName: string): string | null {
+  const want = cardName.trim().toLowerCase();
+  let name: string | null = null;
+  for (const line of out.split('\n')) {
+    if (/^\s*Sink #/.test(line)) { name = null; continue; }
+    const n = line.match(/^\s*Name:\s+(\S+)/);
+    if (n) { name = n[1]; continue; }
+    const c = line.match(/^\s*alsa\.card_name\s*=\s*"([^"]*)"/);
+    if (c && name && c[1].trim().toLowerCase() === want) return name;
+  }
+  return null;
+}
+
 export async function loadModule(name: string, args: string[]): Promise<number | null> {
   const out = await pactl('load-module', name, ...args);
   const id = out !== null ? parseInt(out, 10) : NaN;

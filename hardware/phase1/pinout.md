@@ -23,26 +23,34 @@ dtoverlay=max98357a
 ```
 Sink name appears in `pactl list short sinks`; set it as `BUILTIN_SINK_NAME`.
 
-## Button
+## Buttons
 
-| Pi pin | Signal | Part |
-|---|---|---|
-| 37 | GPIO26 (internal pull-up) | momentary button, one leg |
-| 39 | GND | other leg |
+Two momentary buttons, each between a GPIO pin and ground. Either wire on either pin.
 
-Short press = camping toggle · long press (3 s) = power/sleep · 10 s = factory
-reset. Handled in software (S5 milestone); no overlay needed.
+| Button | Pi pins | Positions (microSD on the left) | Does |
+|---|---|---|---|
+| **Power** | 5 (GPIO3) + 9 (GND) | inner row 3 + inner row 5 | press while running = clean shutdown (`dtoverlay=gpio-shutdown`); press while halted = wake (GPIO3 is the only pin the firmware watches) |
+| **Mute** | 37 (GPIO26) + 39 (GND) | inner row 19 + inner row 20 | short press = mute/unmute the built-in only; hold ≥ 1 s = mute/unmute every speaker (`campfire-panel.py`) |
 
-## RGB LED (common cathode)
+Decided 2026-11-16: no factory-reset button, no pairing button (pairing is
+started from the app). GPIO26 reads `lo` while pressed.
+
+## RGB LED
+
+The bench part is **common-anode**: the longest leg goes to **3.3 V** and a
+colour lights when its pin is pulled **low**. `campfire-panel.py` drives it
+that way by default (`LED_ACTIVE_HIGH=1` in the service file for a
+common-cathode part, whose common goes to pin 34 instead).
 
 | Pi pin | Signal | LED |
 |---|---|---|
+| 1 | 3.3 V | common (longest leg) — common-anode part |
 | 36 | GPIO16 | R via 330 Ω |
 | 33 | GPIO13 / PWM1 | G via 330 Ω |
 | 32 | GPIO12 / PWM0 | B via 330 Ω (hardware PWM → smooth "pulsing blue") |
-| 34 | GND | cathode |
 
-States: pulsing blue = unconfigured · white = home · orange = camping · red = error.
+States: pulsing blue = booting or unconfigured · white = home WiFi · orange =
+camping hotspot · red = bridge API down. Short LED flash = button acknowledged.
 
 ## Power — UPS board (2 × 18650)
 

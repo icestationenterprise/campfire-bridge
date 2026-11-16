@@ -23,7 +23,8 @@ STATE_FILE=/tmp/campfire-network-mode
 REQUEST_FILE=/tmp/campfire-mode-request
 HOTSPOT_CON=campfire-hotspot
 HOTSPOT_IF=wlan0
-BOOT_TIMEOUT=60      # seconds to wait at boot for home WiFi
+BOOT_TIMEOUT=180     # seconds to wait at boot for home WiFi. 60 lost the race to a
+                     # 5 GHz network on every cold boot of the Pi 4B bench unit.
 CHECK_INTERVAL=30    # seconds between loop ticks
 HOME_LOSS_TICKS=4    # consecutive ticks without home WiFi before falling back (4 × 30 s = 2 min)
 RECONNECT_WAIT=45    # seconds to give NM to reconnect after the hotspot is stopped

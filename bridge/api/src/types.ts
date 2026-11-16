@@ -23,6 +23,8 @@ export type BridgeStatus = {
   device:       string;
   party:        PartyStatus;
   network_mode: 'home' | 'camping';
+  /** PulseAudio sink of the built-in speaker, or null when none was found. */
+  builtin_sink?: string | null;
 };
 
 /** A bonded speaker. */

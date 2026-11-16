@@ -92,9 +92,14 @@ ssh pi@campfire-bridge.local
 
 **On the Pi:**
 ```bash
-git clone -b lightest-certifiable-campfire https://github.com/icestationenterprise/campfire-bridge.git ~/campfire-bridge
-bash ~/campfire-bridge/bridge/setup-pi.sh
+sudo apt update && sudo apt install -y git
+git clone -b lightest-certifiable-campfire https://github.com/icestationenterprise/campfire-bridge.git /home/pi/campfire-bridge
+bash /home/pi/campfire-bridge/bridge/setup-pi.sh
+sudo reboot
 ```
+
+The click-by-click version of the whole build, written while the first unit
+was assembled, is `docs/build-standard-step-by-step.md`.
 
 The script runs as `pi` and calls `sudo` where it needs to. It installs the
 packages, writes the Bluetooth, PulseAudio and NetworkManager config, installs

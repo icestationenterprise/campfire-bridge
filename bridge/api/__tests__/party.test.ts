@@ -17,14 +17,16 @@ const fake = {
   nextId:  10,
   modules: [] as Mod[],
   sinks:   [] as string[],
+  builtin: null as string | null,
   calls:   [] as string[],
-  reset() { this.nextId = 10; this.modules = []; this.sinks = []; this.calls = []; },
+  reset() { this.nextId = 10; this.modules = []; this.sinks = []; this.calls = []; this.builtin = null; },
 };
 
 jest.mock('../src/pulse', () => {
   const sinkIndex = (name: string) => fake.sinks.indexOf(name) + 1;
   return {
     pactl: jest.fn(async (...args: string[]) => { fake.calls.push(args.join(' ')); return ''; }),
+    findSinkByCardName: jest.fn(async () => fake.builtin),
     listSinks: jest.fn(async () => [
       ...fake.sinks.map(name => ({ index: sinkIndex(name), name, driver: 'module-bluez5-device.c' })),
       ...(fake.modules.some(m => m.name === 'module-null-sink') ? [{ index: 99, name: 'campfire_party', driver: 'module-null-sink.c' }] : []),
@@ -197,5 +199,28 @@ describe('concurrency', () => {
     await Promise.all([party.enablePartyMode([A]), party.enablePartyMode([A, B]), party.nudgeSpeakerSync(A, 10)]);
     expect(nullSinks()).toHaveLength(1);
     expect(loopbacks()).toHaveLength(2);
+  });
+});
+
+describe('built-in sink detection', () => {
+  const I2S = 'alsa_output.platform-soc_sound.stereo-fallback';
+
+  it('finds the sink by ALSA card name and includes it in every party', async () => {
+    fake.builtin = I2S;
+    fake.sinks.push(I2S, 'bluez_sink.18_90_67_7C_60_B0.a2dp_sink');
+    expect(await party.detectBuiltinSink()).toBe(I2S);
+    expect(party.builtinSinkName()).toBe(I2S);
+    await party.enablePartyMode(['18:90:67:7C:60:B0']);
+    const macs = party.getPartyStatus().speakers.map(s => s.mac);
+    expect(macs).toContain(party.BUILTIN_ID);
+    expect(fake.modules.filter(m => m.name === 'module-loopback').some(m => m.args.includes(`sink=${I2S}`))).toBe(true);
+  });
+
+  it('leaves the built-in out when no sink carries the card name', async () => {
+    fake.builtin = null;
+    fake.sinks.push('bluez_sink.18_90_67_7C_60_B0.a2dp_sink');
+    expect(await party.detectBuiltinSink()).toBeNull();
+    await party.enablePartyMode(['18:90:67:7C:60:B0']);
+    expect(party.getPartyStatus().speakers.map(s => s.mac)).toEqual(['18:90:67:7C:60:B0']);
   });
 });

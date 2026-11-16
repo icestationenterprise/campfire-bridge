@@ -39,3 +39,31 @@ describe('pactl parsers', () => {
     expect(m.get('campfire_party')).toBe(0);
   });
 });
+
+describe('parseSinkByCardName', () => {
+  const { parseSinkByCardName } = require('../src/pulse');
+  const out = [
+    'Sink #0',
+    '\tState: SUSPENDED',
+    '\tName: alsa_output.platform-bcm2835_audio.stereo-fallback',
+    '\tProperties:',
+    '\t\talsa.card_name = "bcm2835 Headphones"',
+    'Sink #1',
+    '\tState: RUNNING',
+    '\tName: alsa_output.platform-soc_sound.stereo-fallback',
+    '\tProperties:',
+    '\t\talsa.card_name = "MAX98357A"',
+    'Sink #2',
+    '\tName: bluez_sink.18_90_67_7C_60_B0.a2dp_sink',
+  ].join('\n');
+
+  it('returns the sink whose ALSA card has the requested name', () => {
+    expect(parseSinkByCardName(out, 'MAX98357A')).toBe('alsa_output.platform-soc_sound.stereo-fallback');
+  });
+
+  it('matches case-insensitively and returns null when absent', () => {
+    expect(parseSinkByCardName(out, 'max98357a')).toBe('alsa_output.platform-soc_sound.stereo-fallback');
+    expect(parseSinkByCardName(out, 'PCM5102')).toBeNull();
+    expect(parseSinkByCardName('', 'MAX98357A')).toBeNull();
+  });
+});

@@ -32,6 +32,8 @@ jest.mock('../src/bluetooth', () => ({
 // ── Mock party ────────────────────────────────────────────────────────────────
 jest.mock('../src/party', () => ({
   BUILTIN_ID:             'builtin',
+  builtinSinkName:        jest.fn().mockReturnValue(null),
+  detectBuiltinSink:      jest.fn().mockResolvedValue(null),
   isActive:               jest.fn().mockReturnValue(false),
   enablePartyMode:        jest.fn().mockResolvedValue(undefined),
   disablePartyMode:       jest.fn().mockResolvedValue(undefined),
