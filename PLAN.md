@@ -14,11 +14,25 @@ A self-contained wireless speaker product with an embedded Linux board, multiple
 
 ## Product SKUs
 
-| SKU | External BT USB Dongles | Total Output Channels |
-|---|---|---|
-| **STANDARD** (was Limited) | 1 | Built-in speaker + 1 external BT speaker — selling first |
-| **EXTENDED** | 3 | Built-in speaker + 3 external BT speakers — selling first |
-| **LITE** | 0 | Built-in speaker only (Flip-class acoustic design) — later |
+Two product lines, each in **Base** (1 radio) and **Extended** (3 radios) —
+decided 2026-11-17 after the Pi 4B acceptance runs showed the CPU load is the
+AirPlay-receive + mixing path, not the built-in output and not the radios
+(built-in only 41.5 % p95, 1 BT 41.4 %, 3 BT 43.3 %). A speaker-less bridge is
+therefore the **same board with the amp block left off**, not a different design.
+
+| Product line | SKU | Radios | Built-in | Notes |
+|---|---|---|---|---|
+| **Campfire Bridge** (bridge only) | Bridge Base | 1 | none | smallest box, smallest pack |
+| | Bridge Extended | 3 | none | |
+| **Campfire Speaker** (portable speaker + bridge) | Speaker Base (was STANDARD / Limited) | 1 | Go class | selling first |
+| | Speaker Extended (was EXTENDED) | 3 | Go class | selling first |
+| | LITE | 0 | Flip class | later |
+
+One carrier PCB serves all four: radios B/C and the amp block (MAX98357A +
+speaker connector) are population options. Two enclosures (bridge box; speaker
+box with the acoustic chamber). Pack size is per SKU — see "Battery & Safe
+Shutdown"; runtime is estimated from `hardware/scripts/power_budget.py`, not
+measured by draining a pack (user's call, 2026-11-17).
 
 The Pi's built-in Bluetooth adapter is **disabled and unused**. All speaker outputs run through the external USB dongles exclusively.
 
@@ -89,22 +103,22 @@ Multiple scenarios are supported from day one:
 
 ### Deploying bridge changes to the Pi
 
-**Terminal 3 — rsync from Mac to Pi**
+The Pi runs plain JavaScript (`node dist/index.js`). Compile on the Mac and ship
+the output; the Pi never needs `tsc` (changed 2026-11-17 — until then the SOP
+rebuilt on the Pi because `dist` was excluded from the rsync).
+
+**On your Mac — build, then sync source + dist**
 ```bash
-rsync -avz --exclude 'node_modules' --exclude 'dist' \
+cd /Users/icestation/Projects/campfire-bridge/bridge/api && rm -rf dist && npm run build && cd ../..
+rsync -avz --exclude 'node_modules' \
   /Users/icestation/Projects/campfire-bridge/bridge/ \
   pi@campfire-bridge.local:/home/pi/campfire-bridge/bridge/
+ssh pi@campfire-bridge.local "systemctl --user restart campfire-bridge"
 ```
 
-**Terminal 2 — remote build (one-off, no interactive session needed)**
-```bash
-ssh pi@campfire-bridge.local "cd ~/campfire-bridge/bridge/api && npm install && npm run build"
-```
-
-**Terminal 4 — already SSH'd in: restart bridge API**
-```bash
-systemctl --user restart campfire-bridge
-```
+`npm install` on the Pi is needed only when `package.json` changes (runtime
+dependencies live on the Pi; the compiler does not have to). A fresh unit still
+builds itself once via `setup-pi.sh` until Step 7 ships a prebuilt image.
 
 > Git push to GitHub is separate from Pi deployment. rsync pushes code directly; git is for version history. Push to GitHub once a task is confirmed working on the Pi.
 
@@ -120,10 +134,10 @@ systemctl --user restart campfire-bridge
 | Bridge API (Express/TS) | ✅ Done | BlueZ via D-Bus snapshot (`bluez.ts`), incremental party graph (`party.ts`), crash-proof routes; same HTTP contract. Refactored 2026-10-07, verified on the Pi and committed 2026-10-12. |
 | librespot | ✅ Removed | Deleted — no longer in codebase |
 | SpotifyContext / spotifyAuth | ✅ Removed | Deleted from app |
-| React Native app (iOS) | 🔶 Functional | Spotify removed; Home/Camping mode toggle; default Home URL = `http://campfire-bridge.local:3000`; Tailscale removed; auto URL fallback (3-failure → switch mode); migration for old AsyncStorage keys; needs account, setup wizard, device mgmt, ownership |
+| React Native app (iOS) | 🔶 Functional | Spotify removed; Home/Camping mode toggle; default Home URL = `http://campfire-bridge.local:3000`; Tailscale removed; auto URL fallback (3-failure → switch mode); migration for old AsyncStorage keys; **Settings → Camping/Home now switches the device itself** (`POST /api/network/mode`, then re-points the app, fallback held 2 min — until 2026-11-17 the toggle only moved the app's URL and the fallback flipped it straight back); needs account, setup wizard, device mgmt, ownership |
 | Mock bridge server | ✅ Done | Updated to match current API shape |
 | mDNS / avahi | ✅ Done | Advertises AirPlay; needs device serial in TXT record |
-| camping-mode daemon | 🔶 Partial | `camping-mode.sh` + NM hotspot profile done; auto-switches home↔camping; home→camping needs 4 consecutive misses (2 min) so WiFi blips no longer kill AirPlay; never scans or switches while a phone is on the hotspot; WiFi power save disabled; `POST /api/network/mode` endpoint done; SSID is "Campfire" (not serial-suffixed yet — needs #10); LED/button not done |
+| camping-mode daemon | 🔶 Partial | `camping-mode.sh` + NM hotspot profile done; auto-switches home↔camping; home→camping needs 4 consecutive misses (2 min) so WiFi blips no longer kill AirPlay; never scans or switches while a phone is on the hotspot; WiFi power save disabled; `POST /api/network/mode` endpoint done; an app-requested hotspot is **forced** — held even with home WiFi in range, released after 30 min with nobody joined (2026-11-17); SSID is "Campfire" (not serial-suffixed yet — needs #10); LED/button not done |
 | App auto URL detection | ✅ Done | After 3 failures on primary URL, tries fallback; auto-switches mode on success |
 
 ---
@@ -388,10 +402,15 @@ Decisions assumed, flip by saying so: carrier designed in-house in KiCad
 (the user suspects even the Pi 4 is over-specified — measure with T16 + the
 constraint sweep before changing it); bay fits 3 × 18650, EVT ships 2; bench
 tests T4–T21 run in parallel with the schematic and feed part sizing.
-**Radios: REOPENED 2026-11-17** — the user wants Pi-style soldered radio
-modules (like the shielded can on the Pi 4), 1–4 per board, **not the Ezurio
-BT850**; categories A/B/C in `requirements.md` R-1, decision D-8. The BT850
-rows in the Phase 2 sample list are on hold.
+**Radios DECIDED 2026-11-17 (later the same day): Murata Type 1MW
+(LBEE5HY1MW, CYW43455, FCC ID VPYLBEE5HY1MW, single modular), Bluetooth over
+UART HCI** — the Pi 4's own radio family, same Linux driver, software
+unchanged. The user asked for Pi-style soldered modules, not Ezurio; the bench
+then showed Bluetooth costs the CM4 ~2 points, which killed the
+transmitter-module (ESP32) option's only technical case. `requirements.md`
+R-1, R-7 (UART assignment draft), D-11 (validate on the Pi 4's onboard radio
+first, bench test T24). Toolchain on the Mac confirmed installed the same day:
+KiCad 10, CadQuery 2.8, FreeCAD, Wireshark, iperf3.
 
 **Largest certification-scope risk (found 2026-11-17):** the SQGBT850 grant
 carries the standard "must not be co-located with any other transmitter"
@@ -788,7 +807,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 - [ ] **#11 — Device firmware: BLE provisioning service** — Device advertises `CampfireBridge` BLE service UUID when unconfigured; characteristic accepts encrypted WiFi SSID + password; reboots into home mode on receipt. Gate for app setup wizard.
 - [ ] **#12 — App: Account screens** — Sign up, log in, forgot/reset password. Requires auth service (#7) to be running.
 - [ ] **#13 — App: Device setup wizard** — BLE scan → send WiFi credentials → claim serial via `POST /devices/claim` → mDNS confirm. Requires BLE provisioning (#11) + account screens (#12) + device registry (#8). This is the critical first-user flow.
-- [~] **#14 — Device firmware: Hotspot/camping mode** — Systemd service monitors for known WiFi networks; falls back to AP mode after 180 s (was 60 — lost the race to 5 GHz on every cold boot); hotspot SSID `Campfire-<last4serial>`; LED states; buttons. *(camping-mode.sh + NM hotspot profile done; SSID is "Campfire" until device identity #10 is done. **2026-11-16:** `bridge/scripts/campfire-panel.py` + `campfire-panel.service` drive the LED (common-anode, active-low: pulsing blue booting/unconfigured, white home, orange camping, red API down) and the mute button on GPIO26 (short = built-in mute, hold = all); the power button on GPIO3 uses `dtoverlay=gpio-shutdown`. Per the user: **no factory-reset button, no pairing button.** Untested on hardware — see `docs/bench-tests.md` T10/T18/T19.)*
+- [~] **#14 — Device firmware: Hotspot/camping mode** — Systemd service monitors for known WiFi networks; falls back to AP mode after 180 s (was 60 — lost the race to 5 GHz on every cold boot); hotspot SSID `Campfire-<last4serial>`; LED states; buttons. *(camping-mode.sh + NM hotspot profile done; SSID is "Campfire" until device identity #10 is done. **2026-11-16:** `bridge/scripts/campfire-panel.py` + `campfire-panel.service` drive the LED (common-anode, active-low: pulsing blue booting/unconfigured, white home, orange camping, red API down) and the mute button on GPIO26 (short = built-in mute, hold = all); the power button on GPIO3 uses `dtoverlay=gpio-shutdown`. Per the user: **no factory-reset button, no pairing button.** **Verified on the bench 2026-11-17:** LED states and the mute button (T18/T19). The power button needs the `gpio_pin=5` rewire — GPIO3 is I²C1 SCL and the kernel gives it to I²C (T10).)*
 - [ ] **#15 — Backend: Cloud WebSocket relay** — Device connects on boot and maintains persistent connection; app falls back to relay when not on LAN; relay routes commands + status only (never audio). Requires device identity (#10) for device authentication.
 - [ ] **#16 — Device firmware: Multi-dongle audio management** — PulseAudio config enumerates each USB BT dongle as a named sink; slot↔speaker MAC mapping persisted to `/etc/campfire/slots.json`; auto-reconnect each slot on boot. **LAUNCH GATE (raised 2026-10-13 by the E7 measurement):** shairport-sync starts only on party enable, so a cold-booted device advertises no AirPlay target until a user opens the app and starts a party. Until this lands, a customer who plugs in at a campsite sees an empty AirPlay list. Boot must restore speakers + party + AirPlay unattended.
 - [ ] **#17 — Device firmware: Bridge API routes (device management)** — `GET /api/status`, `GET /api/bt/slots`, `POST /api/bt/pair`, `POST /api/bt/connect`, `POST /api/bt/disconnect`, `POST /api/network/mode`, `GET /api/update/status`. Requires multi-dongle setup (#16).
@@ -814,7 +833,7 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
 - [ ] **#27e — Hardware: EVT carrier board + enclosure design** *(new 2026-10-17)* — Carrier schematic + 4-layer layout (KiCad), enclosure CAD (radios N/SE/SW, driver, battery bay, USB-C, button, LED), reproducible SoM firmware image. DFM + RF-keepout review. Order 5 PCBs / 3 assembled / 3 enclosures. Requires #27d.
   - [ ] **Step 3 — KiCad schematic** `hardware/carrier/campfire-carrier.kicad_pro`, hierarchical sheets per `requirements.md` §2, started from the CM4IO KiCad files; every switcher against its TI reference design; ERC clean via `check_board.sh`.
   - [ ] **Step 4 — 4-layer layout**; RF per the BT85x + CM4 integration guides (R-3/R-4, C-2 keep-outs); DRC clean; STEP exported.
-  - [ ] **Step 5 — CadQuery enclosure** `hardware/enclosure/` around the board STEP, driver, PR, 3-cell bay, antenna pockets N/SE/SW; chamber volume per `box_model.py`; STEP + 3MF exported by `build_enclosure.py`.
+  - [ ] **Step 5 — two CadQuery enclosures** `hardware/enclosure/` around the board STEP: the **bridge box** (board + pack + antenna pockets N/SE/SW, no chamber) and the **speaker box** (adds driver, PR, chamber per `box_model.py`, 3-cell bay); STEP + 3MF exported by `build_enclosure.py`.
   - [ ] **Step 6 — `export_board.sh A0`**; order 5 PCBs / 3 assembled (DF40 + BT850-ST consigned if not on LCSC) / 3 enclosures; tag `carrier-A0`.
 - [ ] **#27f — Hardware: EVT bring-up + validation** *(new 2026-10-17)* — Bring-up, then the full experiment suite on the EVT (E1/E2/E5/E6/E7/E8), party-distance range test, pre-compliance EMI scan. Budget one re-spin. Requires #27e. **This is the "true prototype."**
   - [ ] **Step 7 (during fab, software) — reproducible CM4 image** from `setup-pi.sh` via pi-gen / rpi-image-gen: S3 read-only root, S4 boot auto-start, S5 provisioning, S6 5 GHz, S8 DSP, `config.txt` per `requirements.md` §11 (`gpio-poweroff` KILL, `ant2`, dwc2 host). Developed on the CM4 IO board, regression on the Pi 4B.

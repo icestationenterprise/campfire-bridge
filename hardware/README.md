@@ -1,5 +1,11 @@
 # Campfire hardware — Lightest Certifiable Campfire (decided 2026-10-21)
 
+> **Superseded in part on 2026-11-17 by `hardware/requirements.md`:** radios are
+> now **Murata Type 1MW over UART HCI** (not USB modules, no USB hub), the
+> product is **four SKUs on one board** (Bridge / Speaker × Base / Extended), and
+> the CM4 pin map below is being reworked for three flow-controlled UARTs (R-7).
+> The Phase 2 block diagram and the pin map here are the rev A record only.
+
 Branch `lightest-certifiable-campfire`. The step-by-step path to the first
 shipped unit is `docs/first-speaker-manual.md`; the shopping list is
 `hardware/bom/phase1-shopping-list.md`.

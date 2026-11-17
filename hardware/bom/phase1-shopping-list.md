@@ -43,8 +43,14 @@ because its gauge is what the safe-shutdown service reads.)
 ## Phase 2 samples — order now (carrier design started 2026-11-17)
 
 Requirement IDs refer to `hardware/requirements.md`. Not yet ordered as of 2026-11-17.
-**Radio rows (BT850-ST, BT850-SA, their antennas) are ON HOLD** — the user
-wants Pi-style soldered modules, not Ezurio; see `requirements.md` R-1 / D-8.
+**Radio decided (D-8, 2026-11-17): Murata Type 1MW.** The Ezurio rows below are
+dead — buy these instead:
+
+| Item | Qty | Unit $ | Where | Notes |
+|---|---|---|---|---|
+| **Murata Type 1MW, LBEE5HY1MW** | 5 | ~$9–12 | Mouser (Murata line), Digi-Key | 3 on the EVT + 2 spares. LGA, solder-down only (no breakout exists) — JLC assembles it. FCC ID VPYLBEE5HY1MW, single modular (R-1) |
+| Antenna from the **VPYLBEE5HY1MW grant's approved list** + MHF/u.FL pigtail | 3 | $2–5 | per the FCC filing / Murata | Pull the list from the FCC exhibits before buying (R-2) |
+| Murata 1MW datasheet + hardware integration guide | — | free | murata.com (may need the Murata "my page" login) | RF pad layout, UART pins, BT_REG_ON, LPO requirement (R-7). Read before the schematic |
 
 | Item | Qty | Unit $ | Where | Notes |
 |---|---|---|---|---|

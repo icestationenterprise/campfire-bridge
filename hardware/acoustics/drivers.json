@@ -1,0 +1,34 @@
+{
+  "_note": "Thiele-Small parameters used by box_model.py. Retailer databases are transcriptions of the datasheet; before trusting a tuning, open the manufacturer PDF and flip verified_against_datasheet to true. Units are in the key names.",
+  "drivers": {
+    "TC6FD00-04": {
+      "name": "Peerless by Tymphany TC6FD00-04, 2-inch paper-cone full-range, 4 ohm",
+      "Fs_Hz": 180,
+      "Qts": 1.00,
+      "Qes": 1.36,
+      "Qms": 4.25,
+      "Vas_L": 0.192,
+      "Sd_cm2": 15.2,
+      "Xmax_mm": 2.0,
+      "Re_ohm": 3.6,
+      "source": "https://loudspeakerdatabase.com/Peerless/TC6FD00-04",
+      "retrieved": "2026-11-17",
+      "verified_against_datasheet": false
+    }
+  },
+  "passive_radiators": {
+    "ND65-PR": {
+      "name": "Dayton Audio ND65-PR, 2.5-inch aluminium-cone passive radiator",
+      "Fs_Hz": 73.0,
+      "Qms": 2.69,
+      "Mms_g": 3.2,
+      "Cms_mm_per_N": 1.45,
+      "Sd_cm2": 15.6,
+      "Vas_L": 0.5,
+      "Xmax_mm": 5.0,
+      "source": "https://www.parts-express.com/pedocs/specs/290-205--dayton-audio-nd65-pr%202-1-2-inch-aluminum-cone-passive-radiator-specifications.pdf",
+      "retrieved": "2026-11-17",
+      "verified_against_datasheet": true
+    }
+  }
+}
