@@ -28,6 +28,8 @@ BOOT_TIMEOUT=180     # seconds to wait at boot for home WiFi. 60 lost the race t
 CHECK_INTERVAL=30    # seconds between loop ticks
 HOME_LOSS_TICKS=4    # consecutive ticks without home WiFi before falling back (4 × 30 s = 2 min)
 RECONNECT_WAIT=45    # seconds to give NM to reconnect after the hotspot is stopped
+FORCED_FILE=/tmp/campfire-mode-forced   # exists while camping was asked for by the app, not by WiFi loss
+FORCED_IDLE_TICKS=60 # forced camping, nobody on the hotspot, home WiFi in range: give up after 60 × 30 s = 30 min
 
 write_state() { echo "$1" > "$STATE_FILE"; }
 log() { echo "[camping-mode] $*"; }
@@ -110,12 +112,20 @@ handle_api_request() {
   local current
   current=$(cat "$STATE_FILE" 2>/dev/null || echo home)
 
-  if [ "$requested" = "home" ] && [ "$current" = "camping" ]; then
-    log "API requested home mode"
-    stop_hotspot
-  elif [ "$requested" = "camping" ] && [ "$current" = "home" ]; then
-    log "API requested camping mode"
-    start_hotspot
+  if [ "$requested" = "home" ]; then
+    rm -f "$FORCED_FILE"
+    if [ "$current" = "camping" ]; then
+      log "API requested home mode"
+      stop_hotspot
+    fi
+  elif [ "$requested" = "camping" ]; then
+    if [ "$current" = "home" ]; then
+      log "API requested camping mode"
+      start_hotspot
+    fi
+    # Mark it forced only if the hotspot really came up. A forced hotspot is
+    # not torn down just because home WiFi is in range (see the loop).
+    [ "$(cat "$STATE_FILE" 2>/dev/null)" = "camping" ] && touch "$FORCED_FILE"
   fi
 }
 
@@ -127,6 +137,7 @@ steer_bluetooth() {
 # ── Boot: wait for home WiFi ──────────────────────────────────────────────────
 
 write_state home
+rm -f "$FORCED_FILE"   # a reboot starts in automatic mode
 log "Waiting up to ${BOOT_TIMEOUT}s for home WiFi..."
 
 elapsed=0
@@ -148,6 +159,7 @@ steer_bluetooth
 # ── Monitoring loop ───────────────────────────────────────────────────────────
 
 home_missing=0
+forced_idle=0
 
 while true; do
   sleep "$CHECK_INTERVAL"
@@ -160,11 +172,26 @@ while true; do
     if ! hotspot_active; then
       log "State says camping but the hotspot is down — correcting to home"
       write_state home
+      rm -f "$FORCED_FILE"
       continue
     fi
     clients=$(hotspot_clients)
     if [ "${clients:-0}" -gt 0 ]; then
+      forced_idle=0
       continue    # someone is using the hotspot — don't scan, don't switch
+    fi
+    if [ -f "$FORCED_FILE" ]; then
+      # The app asked for this hotspot. Home WiFi being in range is not a
+      # reason to leave it — the user is standing next to the router, setting
+      # up a party, and their phone has not joined yet. Hold it (no scanning
+      # either: a scan drops the AP) and give up only after a long idle stretch.
+      forced_idle=$((forced_idle + 1))
+      if [ "$forced_idle" -lt "$FORCED_IDLE_TICKS" ]; then
+        continue
+      fi
+      log "Forced camping idle for $((FORCED_IDLE_TICKS * CHECK_INTERVAL / 60)) min with nobody joined — back to automatic"
+      rm -f "$FORCED_FILE"
+      forced_idle=0
     fi
     if home_wifi_in_range; then
       log "Home WiFi in range and hotspot idle"

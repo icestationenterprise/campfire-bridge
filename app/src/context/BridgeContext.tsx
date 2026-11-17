@@ -56,6 +56,8 @@ export type BridgeContextType = {
   networkMode: 'home' | 'camping' | null;
   baseURL: string;
   refresh: () => Promise<void>;
+  /** Ask the DEVICE to change networks (hotspot up / back to home WiFi). */
+  setDeviceNetworkMode: (mode: 'home' | 'camping') => Promise<void>;
   // Bluetooth device management
   fetchBtDevices:     () => Promise<void>;
   connectBtDevice:    (mac: string) => Promise<void>;
@@ -105,6 +107,8 @@ export default function BridgeProvider({
   const pollRef        = useRef<ReturnType<typeof setInterval> | null>(null);
   const failCount      = useRef(0);
   const tryingFallback = useRef(false);
+  /** Until this time, a dead primary URL does NOT trigger the fallback (see setDeviceNetworkMode). */
+  const holdFallbackUntil = useRef(0);
 
   // ── Core fetch ────────────────────────────────────────────────────────────
 
@@ -170,7 +174,8 @@ export default function BridgeProvider({
         failCount.current      = 0;
       } else {
         failCount.current += 1;
-        if (failCount.current >= 3 && fallbackUrl && fallbackUrl !== baseURL) {
+        if (failCount.current >= 3 && fallbackUrl && fallbackUrl !== baseURL
+            && Date.now() >= holdFallbackUntil.current) {
           tryingFallback.current = true;
         }
       }
@@ -183,6 +188,22 @@ export default function BridgeProvider({
     pollRef.current = setInterval(refresh, 2000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [refresh]);
+
+  // ── Device network mode ───────────────────────────────────────────────────
+
+  /**
+   * Tell the device to switch networks. The camping daemon on the device acts
+   * within ~30 s; while it does, the phone is still on the old network and the
+   * new URL fails. Without a hold, three failed polls would trigger the URL
+   * fallback, the old URL would still answer, and the app would flip itself
+   * straight back — the "camping mode reverts" bug. So hold the fallback for
+   * two minutes after any deliberate switch.
+   */
+  const setDeviceNetworkMode = useCallback(async (mode: 'home' | 'camping') => {
+    await request('/api/network/mode', { method: 'POST', body: JSON.stringify({ mode }) });
+    holdFallbackUntil.current = Date.now() + 120_000;
+    setNetworkMode(mode);
+  }, [request]);
 
   // ── Bluetooth device management ───────────────────────────────────────────
 
@@ -297,13 +318,13 @@ export default function BridgeProvider({
 
   const value = useMemo<BridgeContextType>(
     () => ({
-      status, btDevices, discoveredDevices, scanning, isReachable, networkMode, baseURL, refresh,
+      status, btDevices, discoveredDevices, scanning, isReachable, networkMode, baseURL, refresh, setDeviceNetworkMode,
       fetchBtDevices, connectBtDevice, disconnectBtDevice, scanBtDevices, pairBtDevice, removeBtDevice,
       partyStatus, enableParty, disableParty, setSpeakerVolume, setSpeakerMuted, setGroupVolume, shiftGroupVolume, setGroupMuted,
       adjustSpeakerSync,
     }),
     [
-      status, btDevices, discoveredDevices, scanning, isReachable, networkMode, baseURL, refresh,
+      status, btDevices, discoveredDevices, scanning, isReachable, networkMode, baseURL, refresh, setDeviceNetworkMode,
       fetchBtDevices, connectBtDevice, disconnectBtDevice, scanBtDevices, pairBtDevice, removeBtDevice,
       partyStatus, enableParty, disableParty, setSpeakerVolume, setSpeakerMuted, setGroupVolume, shiftGroupVolume, setGroupMuted,
       adjustSpeakerSync,

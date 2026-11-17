@@ -176,3 +176,60 @@ describe('BridgeContext — Bluetooth devices', () => {
     expect(body.mac).toBe('AA:BB:CC:DD:EE:01');
   });
 });
+
+// ── Device network mode ───────────────────────────────────────────────────────
+
+describe('BridgeContext — device network mode', () => {
+  beforeEach(() => {
+    fetchMock.resetMocks();
+    fetchMock.mockResponse(JSON.stringify(mockStatus));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('setDeviceNetworkMode() POSTs the mode to /api/network/mode', async () => {
+    const { result } = renderHook(() => useBridge(), { wrapper });
+    await waitFor(() => expect(result.current.isReachable).toBe(true));
+
+    await act(async () => { await result.current.setDeviceNetworkMode('camping'); });
+
+    const call = fetchMock.mock.calls.find(c => (c[0] as string).endsWith('/api/network/mode'));
+    expect(call).toBeDefined();
+    expect((call![1] as RequestInit).method).toBe('POST');
+    expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ mode: 'camping' });
+    expect(result.current.networkMode).toBe('camping');
+  });
+
+  it('holds the URL fallback after the device is told to switch, so the app does not flip back', async () => {
+    jest.useFakeTimers();
+    const FALLBACK   = 'http://192.168.4.1:3000';
+    const onFallback = jest.fn();
+    const wrapperWithFallback = ({ children }: { children: React.ReactNode }) => (
+      <BridgeProvider baseURL={BASE_URL} fallbackUrl={FALLBACK} onFallback={onFallback}>{children}</BridgeProvider>
+    );
+    fetchMock.mockResponse(async req => {
+      if (req.url.endsWith('/api/network/mode')) return JSON.stringify({ ok: true, requested: 'camping' });
+      if (req.url.startsWith(BASE_URL)) return JSON.stringify(mockStatus);
+      throw new Error('fallback must not be tried yet');
+    });
+
+    const { result } = renderHook(() => useBridge(), { wrapper: wrapperWithFallback });
+    await waitFor(() => expect(result.current.isReachable).toBe(true));
+    await act(async () => { await result.current.setDeviceNetworkMode('camping'); });
+
+    // The device leaves home WiFi: the primary URL goes dark, the fallback would answer.
+    fetchMock.mockResponse(async req => {
+      if (req.url.startsWith(FALLBACK)) return JSON.stringify(mockStatus);
+      throw new Error('primary down');
+    });
+    for (let i = 0; i < 6; i++) {
+      await act(async () => { jest.advanceTimersByTime(2000); });
+    }
+
+    expect(onFallback).not.toHaveBeenCalled();
+    const urls = fetchMock.mock.calls.map(c => c[0] as string);
+    expect(urls.some(u => u.startsWith(FALLBACK))).toBe(false);
+  });
+});

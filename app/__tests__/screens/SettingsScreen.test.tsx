@@ -22,6 +22,11 @@ jest.mock('../../src/context/SettingsContext', () => ({
   useSettings: () => ({ ...mockSettings, setSetting: mockSetSetting }),
 }));
 
+const mockSetDeviceNetworkMode = jest.fn();
+jest.mock('../../src/context/BridgeContext', () => ({
+  useBridge: () => ({ setDeviceNetworkMode: mockSetDeviceNetworkMode }),
+}));
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('SettingsScreen', () => {
@@ -78,11 +83,47 @@ describe('SettingsScreen', () => {
 
   it('calls setSetting with mode=camping when Camping is pressed', async () => {
     mockSetSetting.mockResolvedValue(undefined);
+    mockSetDeviceNetworkMode.mockResolvedValue(undefined);
     render(<SettingsScreen />);
 
     fireEvent.press(screen.getByText('Camping'));
 
     await waitFor(() => expect(mockSetSetting).toHaveBeenCalledWith('mode', 'camping'));
+  });
+
+  it('tells the DEVICE to switch before re-pointing the app', async () => {
+    mockSetSetting.mockResolvedValue(undefined);
+    mockSetDeviceNetworkMode.mockResolvedValue(undefined);
+    render(<SettingsScreen />);
+
+    fireEvent.press(screen.getByText('Camping'));
+
+    await waitFor(() => expect(mockSetSetting).toHaveBeenCalledWith('mode', 'camping'));
+    expect(mockSetDeviceNetworkMode).toHaveBeenCalledWith('camping');
+    expect(mockSetDeviceNetworkMode.mock.invocationCallOrder[0])
+      .toBeLessThan(mockSetSetting.mock.invocationCallOrder[0]);
+  });
+
+  it('still re-points the app when the device cannot be reached', async () => {
+    mockSetSetting.mockResolvedValue(undefined);
+    mockSetDeviceNetworkMode.mockRejectedValueOnce(new Error('unreachable'));
+    render(<SettingsScreen />);
+
+    fireEvent.press(screen.getByText('Camping'));
+
+    await waitFor(() => expect(mockSetSetting).toHaveBeenCalledWith('mode', 'camping'));
+  });
+
+  it('tells the device to go home when Home is pressed', async () => {
+    mockSettings = { ...mockSettings, mode: 'camping' };
+    mockSetSetting.mockResolvedValue(undefined);
+    mockSetDeviceNetworkMode.mockResolvedValue(undefined);
+    render(<SettingsScreen />);
+
+    fireEvent.press(screen.getByText('Home'));
+
+    await waitFor(() => expect(mockSetSetting).toHaveBeenCalledWith('mode', 'home'));
+    expect(mockSetDeviceNetworkMode).toHaveBeenCalledWith('home');
   });
 
   it('shows camping setup instructions when mode is camping', () => {

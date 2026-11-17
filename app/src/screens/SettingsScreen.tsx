@@ -14,24 +14,46 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useSettings } from '../context/SettingsContext';
+import { useBridge } from '../context/BridgeContext';
 
 export default function SettingsScreen() {
   const { homeUrl, campingUrl, mode, setSetting } = useSettings();
+  const { setDeviceNetworkMode } = useBridge();
 
   const [homeDraft,    setHomeDraft]    = useState(homeUrl);
   const [campingDraft, setCampingDraft] = useState(campingUrl);
   const [saved,        setSaved]        = useState(false);
 
+  /**
+   * Tell the DEVICE first, while the app can still reach it on the network it
+   * is on now; only then re-point the app. Until 2026-11-17 this toggle only
+   * moved the app's URL: the device never changed networks, the new URL went
+   * unanswered, and the URL fallback flipped the app straight back.
+   */
   const handleModeChange = async (next: 'home' | 'camping') => {
+    let deviceTold = true;
+    try {
+      await setDeviceNetworkMode(next);
+    } catch {
+      deviceTold = false;
+    }
     await setSetting('mode', next);
     if (next === 'camping') {
       Alert.alert(
         'Switch to Camping Mode',
-        'Connect your phone to the "Campfire" WiFi network (password: campfire123), then the app will reach the bridge automatically.',
+        (deviceTold
+          ? 'The speaker is starting its "Campfire" WiFi network — give it about 30 seconds. '
+          : 'The speaker could not be reached to switch it. If it is already broadcasting "Campfire", carry on. ')
+        + 'Connect your phone to "Campfire" (password: campfire123); the app will find the speaker automatically.',
         [
           { text: 'Open WiFi Settings', onPress: () => Linking.openURL('App-Prefs:root=WIFI') },
           { text: 'Done', style: 'cancel' },
         ],
+      );
+    } else if (!deviceTold) {
+      Alert.alert(
+        'Speaker not reached',
+        'The app is back in Home mode, but the speaker could not be told. Join its "Campfire" WiFi and press Home again, or wait: it returns to home WiFi by itself after 30 minutes with nobody connected.',
       );
     }
   };
