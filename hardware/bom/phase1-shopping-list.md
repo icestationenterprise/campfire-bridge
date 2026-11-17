@@ -40,16 +40,26 @@ of $84–129 is lower because it uses a $14 charge board instead of the $28 UPS
 HAT and a home-printed box; the HAT is worth it for the first two units
 because its gauge is what the safe-shutdown service reads.)
 
-## Phase 2 samples (order later, before the carrier design)
+## Phase 2 samples — order now (carrier design started 2026-11-17)
+
+Requirement IDs refer to `hardware/requirements.md`. Not yet ordered as of 2026-11-17.
 
 | Item | Qty | Unit $ | Where | Notes |
 |---|---|---|---|---|
-| Ezurio BT850-ST (external-antenna pad) | 3 | $11 | Digi-Key `BT850-ST-T/R` (8135951) | Solder-down version of the BT851 for the carrier |
+| Raspberry Pi **CM4 Lite 1 GB wireless** (CM4001000) | 1 | $30 | PiShop / Digi-Key | Carrier bring-up; image work on the IO board first (C-1) |
+| Raspberry Pi **CM4 IO Board** | 1 | $35 | PiShop / Digi-Key | Step 7 image work before the carrier exists; the reference design we crib (C-2) |
+| CM4 **antenna kit** (official, U.FL) | 1 | $5 | PiShop | External WiFi antenna inside the grant (C-6) |
+| **Ezurio BT850-ST** (trace-pad antenna) | 3 | $11 | Digi-Key `BT850-ST-T/R` (8135951) | Solder-down BT851 for the carrier (R-1). Needs a breakout or the EVT board to test |
 | Ezurio BT850-SA (chip antenna) | 1 | $10.85 | Digi-Key 8251356 | Compare against -ST + pigtail |
-| Fn-Link 6221E-UUC (RTL8821CU) | 3 | $4 | Fn-Link direct / made-in-china | FCC ID 2AATL-6221EUUC; needs a breakout; cheapest certified radio at volume |
-| Raspberry Pi CM4 Lite 1 GB wireless | 1 | $30 | PiShop / Digi-Key | For the carrier bring-up |
-| 2.4 GHz FPC antenna + MHF/u.FL pigtail | 3 | $1.50 | Amazon / Digi-Key | Must match the BT850-ST grant's antenna list |
-| MAX17048 breakout | 1 | $6 | Adafruit / SparkFun | Fuel gauge for the carrier |
+| **Antenna from the SQGBT850 approved list** + MHF1/u.FL pigtail | 3 | $2–5 | Digi-Key / Ezurio | Names in the FCC filing: `EFG2400A3S-10MHF1`, `EMF2449A1-10MH4L` — confirm the current list and connector in the BT85x integration guide before buying (R-2) |
+| Fn-Link 6221E-UUC (RTL8821CU) | 3 | $4 | Fn-Link direct / made-in-china | FCC ID 2AATL-6221EUUC; needs a breakout; cost-down evaluation only (R-6) |
+| **MAX17048 breakout** | 1 | $6 | Adafruit 5580 / SparkFun | Fuel gauge (P-5); try it on the bench unit's I²C first |
+| **Charger with power path, evaluation**: BQ25616EVM, or Adafruit BQ24074 breakout (#4755) | 1 | $50 / $15 | TI / Adafruit | D-1 bench test: play while charging, measure the charge current left over |
+| **TPS61088 boost module** (5 V ≥ 3 A, generic) | 1 | $5 | Amazon / AliExpress | P-6 bench: run the Pi 4B from a cell through it, scope the ripple |
+| **Pushbutton power switch with OFF input** (Pololu #2808, LV) | 1 | $6 | Pololu | P-7 latch behaviour on the bench; the carrier uses an LTC2954 |
+| USB-C breakout with CC pull-downs (Adafruit #4090) | 1 | $4 | Adafruit | P-1 bench input |
+| 18650 ×3 holder + a **1S3P protected pack** sample with UN38.3 | 1 | $20 | 18650BatteryStore / pack vendor | D-3 bay sizing; pack datasheet goes in `hardware/carrier/datasheets/` (P-4) |
+| JST-XH 3-pin + JST-PH 2-pin connector kit, u.FL cable assemblies | 1 | $8 | Amazon | M-2 |
 
 ## Not needed
 

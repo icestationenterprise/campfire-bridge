@@ -364,6 +364,40 @@ trim · AirPlay 2 from source + nqptp · read-only root · boot auto-start ·
 hotspot provisioning + forced password + per-unit SSID · prefer 5 GHz ·
 USB 2.0 port preference · built-in DSP chain.
 
+### Production build — carrier board + enclosure (started 2026-11-17)
+
+Executes #27d → #27e → #27f → #27g as Steps 0–9 (sub-bullets in the work
+order). **Requirements with IDs: `hardware/requirements.md`** — the schematic
+may not depend on any open decision in its §12. Tooling: KiCad 9 + `kicad-cli`
+(`hardware/scripts/check_board.sh`, `export_board.sh`), CadQuery for the
+PCB-aware enclosure (the OpenSCAD box stays for Phase 1), Python models
+(`hardware/acoustics/box_model.py`, `hardware/scripts/power_budget.py`),
+iperf3 + tshark on the real hotspot.
+
+An external 13-phase "engineering directive" was reviewed the same day. Adopted:
+its toolchain, certified-module rule, text-based sources, ~5 prototype boards,
+test points, staged definition of done. Rejected: starting at requirements
+(Campfire is past its phases 1–3), its MCU-class assumptions (SoftAP/AP+STA/NAT,
+Wokwi, vendor C SDK — AirPlay 2 needs a Linux stack), deferring the battery
+(FCC tests the unit as configured), and ns-3/openEMS/FEM/SPICE simulation
+(iperf3, range tests, a thermocouple and vendor reference layouts answer the
+same questions for one person).
+
+Decisions assumed, flip by saying so: carrier designed in-house in KiCad
+(outsourcing $5–20k is the fallback); EVT radios = Ezurio BT850-ST ×3 (same
+silicon as the bench BT851); compute stays CM4 Lite 1 GB wireless; bay fits
+3 × 18650, EVT ships 2; bench tests T4–T21 run in parallel with the schematic
+and feed part sizing.
+
+**Largest certification-scope risk (found 2026-11-17):** the SQGBT850 grant
+carries the standard "must not be co-located with any other transmitter"
+condition, so four radios in one host need a simultaneous-transmission
+evaluation (`requirements.md` R-5). Ask Ezurio and the lab before layout.
+
+First model results: PR tuning 110 Hz at 0.4 L / 99 Hz at 0.6 L, the driver
+never reaches Xmax inside the amp's voltage range; a 1.5 A USB-C input charges
+at ~0.6 A while EXTENDED plays (≈12 h to full) vs ~2 A with 3 A detection
+(≈3.5 h) — which is why D-1/D-2 default to an I²C charger plus CC detection.
 
 ### Hardware Characterization (must precede BOM finalization)
 
@@ -770,9 +804,19 @@ When asked "what is next", Claude will present the first three `[ ]` items as op
   - **Good news for the PSU:** peak 5.57 W means a **~8 W supply** suffices, against the 25 W the Pi 5 negotiates over USB-PD.
 - [~] **#27c — Hardware: Build the Pi 4B STANDARD + EXTENDED units + acceptance run** *(re-pointed 2026-10-21)* — Parts ordered per `hardware/bom/phase1-shopping-list.md`; build per `docs/first-speaker-manual.md` Steps 3–6; run `dsp_bench`, E5, E6, E7 and the 15-ft range test (BT851 vs old dongles). Requires the harness (#27a). Gates the first beta units.
 - [~] **#27d — Hardware: Architecture lock** *(new 2026-10-17)* — `hardware/README.md` rev A is the block diagram, parts list, power tree and CM4 pin map (CM4 Lite 1 GB; 3 soldered USB-HCI BT modules with modular grants; MAX98357A; 1S3P 18650 ≈ 8 h; charger/boost/gauge/latch). Remaining: pick the exact module and charger part numbers against LCSC stock and confirm their FCC IDs. First artefact for both the FCC lab and patent counsel.
+  - [~] **Step 0 — toolchain + automation.** Scripts written 2026-11-17: `hardware/scripts/check_board.sh` (ERC/DRC gate), `export_board.sh` (gerbers/drill/CPL/BOM/STEP/manifest), `power_budget.py`; `hardware/acoustics/box_model.py` + `drivers.json`. Still to install on the Mac: KiCad 9, CadQuery (Python 3.12 venv), iperf3, Wireshark; `iperf3` on the Pi.
+  - [~] **Step 2 — architecture lock close-out.** `hardware/requirements.md` written 2026-11-17 (C/P/R/H/A/U/M/F IDs). Open: decisions D-1…D-7 in its §12, Phase 2 samples order (`hardware/bom/phase1-shopping-list.md` → "Phase 2 samples"), R-5 co-location answer from Ezurio + lab. #27d closes when those are done.
+  - [ ] **Step 1 (parallel, user hands) — bench tests T4–T21** on the Pi 4B (`docs/bench-tests.md`). T12 validates the radio, T13/T14 replace the ESTIMATE rows in `power_budget.py`, T21 proves the script the Step 7 image starts from.
 - [ ] **#27e — Hardware: EVT carrier board + enclosure design** *(new 2026-10-17)* — Carrier schematic + 4-layer layout (KiCad), enclosure CAD (radios N/SE/SW, driver, battery bay, USB-C, button, LED), reproducible SoM firmware image. DFM + RF-keepout review. Order 5 PCBs / 3 assembled / 3 enclosures. Requires #27d.
+  - [ ] **Step 3 — KiCad schematic** `hardware/carrier/campfire-carrier.kicad_pro`, hierarchical sheets per `requirements.md` §2, started from the CM4IO KiCad files; every switcher against its TI reference design; ERC clean via `check_board.sh`.
+  - [ ] **Step 4 — 4-layer layout**; RF per the BT85x + CM4 integration guides (R-3/R-4, C-2 keep-outs); DRC clean; STEP exported.
+  - [ ] **Step 5 — CadQuery enclosure** `hardware/enclosure/` around the board STEP, driver, PR, 3-cell bay, antenna pockets N/SE/SW; chamber volume per `box_model.py`; STEP + 3MF exported by `build_enclosure.py`.
+  - [ ] **Step 6 — `export_board.sh A0`**; order 5 PCBs / 3 assembled (DF40 + BT850-ST consigned if not on LCSC) / 3 enclosures; tag `carrier-A0`.
 - [ ] **#27f — Hardware: EVT bring-up + validation** *(new 2026-10-17)* — Bring-up, then the full experiment suite on the EVT (E1/E2/E5/E6/E7/E8), party-distance range test, pre-compliance EMI scan. Budget one re-spin. Requires #27e. **This is the "true prototype."**
+  - [ ] **Step 7 (during fab, software) — reproducible CM4 image** from `setup-pi.sh` via pi-gen / rpi-image-gen: S3 read-only root, S4 boot auto-start, S5 provisioning, S6 5 GHz, S8 DSP, `config.txt` per `requirements.md` §11 (`gpio-poweroff` KILL, `ant2`, dwc2 host). Developed on the CM4 IO board, regression on the Pi 4B.
+  - [ ] **Step 8 — bring-up + validation**: rails (no CM4) → boot → hub → 3× `hci` → I²S → gauge → latch zero-draw; then E1/E2/E5/E6/E7/E8, 15-ft range, `bridge/diagnostics/wifi-iperf.sh` (iperf3 + tshark on the hotspot under 3-BT load), one near-field pre-scan day.
 - [ ] **#27g — Plan package** *(new 2026-10-17)* — (1) costed BOM at 1/50/500 + NRE + landed cost + margin; (2) FCC submission set; (3) invention disclosure. Starts at #27d, finalised with #27f numbers. Gates #28 and the FCC submission in #1. See "MVP Prototype & Plan Package" in Phase 2.
+  - [ ] **Step 9 — plan package**: costed BOM with quotes at 1/50/500, FCC submission set per `requirements.md` §10 (F-4), updated disclosure figures for counsel; lab engaged now with the R-5 co-location question and the two "FCC package" questions.
 - [ ] **#28 — Hardware: BOM finalization** — Confirm all components (SBC, dongles, USB hub, DAC/amp, speaker, PSU, LED, button, enclosure) for both SKUs with suppliers and quantities. Requires characterization results (#27a) and the plan package (#27g) — do not commit to suppliers before the measured spec and the costed BOM exist. Runs in parallel with all software work.
 - [ ] **#29 — Hardware: Factory provisioning jig + process** — Serial number generation script (batch by SKU), cert generation + flash script, firmware image, label printing. Requires device identity spec (#10) + BOM finalized (#28).
 - [ ] **#30 — E-commerce: Shopify store** — Limited + Extended SKU listings, payment processing, shipping. Requires LLC (#2).
