@@ -43,6 +43,8 @@ because its gauge is what the safe-shutdown service reads.)
 ## Phase 2 samples — order now (carrier design started 2026-11-17)
 
 Requirement IDs refer to `hardware/requirements.md`. Not yet ordered as of 2026-11-17.
+**Radio rows (BT850-ST, BT850-SA, their antennas) are ON HOLD** — the user
+wants Pi-style soldered modules, not Ezurio; see `requirements.md` R-1 / D-8.
 
 | Item | Qty | Unit $ | Where | Notes |
 |---|---|---|---|---|

@@ -79,8 +79,8 @@ Numbers from `power_budget.py` (defaults). **ESTIMATE until T13/T14 on the Pi 4B
 
 | ID | Requirement | Verify by |
 |---|---|---|
-| R-1 | **Ezurio BT850-ST ×3** (EXTENDED) / ×1 + two unpopulated footprints (STANDARD). USB HCI, generic `btusb`; FCC ID **SQGBT850**, modular. Supply and strapping per the BT85x datasheet (verify whether the module takes 5 V VBUS or 3.3 V). | three `hciX` adapters, each a BT850 |
-| R-2 | **Antenna from the grant's approved list only**, max gain 0.5 dBi, 50 Ω, via u.FL/MHF on the module's trace pad per the BT85x hardware integration guide. Two names appearing in the FCC filing: `EFG2400A3S-10MHF1`, `EMF2449A1-10MH4L` — confirm the current list and connector (MHF1 vs MHF4) before ordering. | BOM lists the antenna MPN and the page of the integration guide it comes from |
+| R-1 | **REOPENED 2026-11-17.** The user wants radios like the Pi 4's own shielded on-board module — small, soldered, no USB-stick lineage — **not the Ezurio BT850**. 1 to 4 per board. Candidate categories, decision pending (see D-8): **(A)** CYW43455 combo module as used on the Pi, UART HCI to BlueZ, driver-identical to the Pi's onboard BT (Murata Type 1MW, AzureWave AW-CM256SM, ~$9–12); **(B)** BT-only HCI module with a modular grant (non-Ezurio options to be surveyed); **(C)** audio-transmitter module that owns the BT link and takes PCM from the CM4 (ESP32-WROOM-32E ~$3 with our firmware, or a QCC3008-class AT-command audio module ~$6–10) — a software rebuild of the radio side, lightest CM4 load. | one independent BT controller per speaker, each with its own antenna |
+| R-2 | **Antenna from the chosen module's grant list only**, 50 Ω, via u.FL/MHF or the module's own trace antenna per its integration guide. (The Ezurio antenna names recorded earlier no longer apply.) | BOM lists the antenna MPN and the integration-guide page |
 | R-3 | **One antenna per radio at the enclosure extremes (N / SE / SW)**, on pigtails; antennas ≥ 20 mm from any metal, from the CM4 antenna, and from each other as far as the box allows. Modules may sit near the hub; the antenna position is what matters. | T12-class range test on the EVT: 15 ft with people in between, 30 min, no dropouts |
 | R-4 | Radio USB lines: 90 Ω differential, length-matched, no vias where avoidable, away from the boost inductor and the amp outputs. | DRC net classes; eye not required at full speed |
 | R-5 | **Co-location**: the SQGBT850 grant carries the standard "must not be co-located or operate in conjunction with any other antenna or transmitter" condition. Four transmitters (CM4 WiFi + 3 BT) in one host therefore need a simultaneous-transmission evaluation (RF exposure is a calculation at these powers; the lab decides the form). **Ask Ezurio and the lab before layout** whether a permissive change exists or how previous hosts handled it. This is the largest certification-scope risk. | written answer filed in `hardware/carrier/datasheets/` |
@@ -157,7 +157,8 @@ dtoverlay=gpio-poweroff,gpiopin=27    # assert KILL after poweroff (P-7)
 | D-4 | Button/LED: panel-mount on wires vs board-mounted + light pipe | **Panel-mount on headers** for EVT (matches the bench; no mechanical coupling to the board). | with M-2 |
 | D-5 | Hub: USB2514B vs FE1.1s | **USB2514B** for EVT (documentation, strap options); FE1.1s is a cost-down swap. | schematic |
 | D-6 | Radio supply: confirm BT850-ST VBUS 5 V vs 3.3 V from the datasheet | — | before schematic |
-| D-7 | R-5 co-location: answer from Ezurio + lab | — | before layout |
+| D-7 | R-5 co-location: answer from the chosen module's vendor + lab | — | before layout |
+| D-8 | **Radio category A / B / C (R-1)** — the user's call; it decides whether the radio side keeps BlueZ (A, B) or becomes module firmware + PCM distribution (C), and therefore how much CM4 compute is left to trim. | none — must be decided | before anything else in the schematic |
 
 ## 13. Inputs still owed by the bench unit (Step 1)
 

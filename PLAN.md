@@ -384,10 +384,14 @@ Wokwi, vendor C SDK — AirPlay 2 needs a Linux stack), deferring the battery
 same questions for one person).
 
 Decisions assumed, flip by saying so: carrier designed in-house in KiCad
-(outsourcing $5–20k is the fallback); EVT radios = Ezurio BT850-ST ×3 (same
-silicon as the bench BT851); compute stays CM4 Lite 1 GB wireless; bay fits
-3 × 18650, EVT ships 2; bench tests T4–T21 run in parallel with the schematic
-and feed part sizing.
+(outsourcing $5–20k is the fallback); compute stays CM4 Lite 1 GB wireless
+(the user suspects even the Pi 4 is over-specified — measure with T16 + the
+constraint sweep before changing it); bay fits 3 × 18650, EVT ships 2; bench
+tests T4–T21 run in parallel with the schematic and feed part sizing.
+**Radios: REOPENED 2026-11-17** — the user wants Pi-style soldered radio
+modules (like the shielded can on the Pi 4), 1–4 per board, **not the Ezurio
+BT850**; categories A/B/C in `requirements.md` R-1, decision D-8. The BT850
+rows in the Phase 2 sample list are on hold.
 
 **Largest certification-scope risk (found 2026-11-17):** the SQGBT850 grant
 carries the standard "must not be co-located with any other transmitter"
