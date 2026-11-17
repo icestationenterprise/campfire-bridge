@@ -392,3 +392,83 @@ Fill this in as you go. This is what you take to suppliers.
 **Highest-value work remaining, in order:** E4 attribution (a 4 MB/s idle writer is a
 field-reliability bug *and* it inflates every CPU number below), E5 re-run with a
 matched control, E2 at full duration with adapter logging, E7, E6, E1, E3 boot runs.
+
+---
+
+## Pi 4B acceptance — STANDARD bench unit (2026-11-17)
+
+Pi 4 Model B 1 GB Rev 1.5 (4× Cortex-A72, 600–1800 MHz), trimmed 64-bit Lite
+image from `setup-pi.sh`, JBL Go Essential 2 on the Ezurio BT851 + MAX98357A
+built-in, AirPlay 2 playing, home WiFi. 300 s captures at 1 s samples; raw
+files on the Pi in `~/campfire-diag/pi4b-1bt-*`. Clock pinned with
+`constrain.sh clock` (governor=performance).
+
+| Clock | cpu_all p50 / p95 | busiest core p50 / p95 / max | RAM p50 / max | Temp max | Faults | Heard |
+|---|---|---|---|---|---|---|
+| ondemand, avg 1559 MHz (700–1800) | 10.0 / 19.6 % | 16.9 / 41.4 / 48.9 % | 217 / 232 MB | 46.7 °C | none | clean |
+| 900 MHz pinned | 15.1 / 29.2 % | 23.1 / 50.3 / 57.1 % | 216 / 231 MB | 47.2 °C | none | clean |
+| 600 MHz pinned | 20.5 / 36.2 % | 30.7 / 59.3 / 72.7 % | 213 / 230 MB | 46.7 °C | **1 underrun** | not heard |
+
+**Reading:**
+
+- **The STANDARD knee on a Cortex-A72 lies between 600 and 900 MHz.** 900 MHz is
+  clean with the busiest core at 50 % p95; 600 MHz logs one underrun in 300 s,
+  inaudible to the listener. The Pi 4 at 1.8 GHz therefore carries roughly
+  **2× headroom for STANDARD**. Busiest-thread work ≈ 180–270 MHz-equivalent of
+  A72 at median, ~350–650 at p95 (bursty: the decoder works in chunks).
+- **RAM peak 232 MB on the trimmed image**, against 541 MB on the Pi 5's
+  untrimmed image (E3). The "1 GB floor" was an artefact of that image.
+  **512 MB is back on the table**, pending the same measurement at EXTENDED +
+  camping.
+- No throttling, 47 °C open-board at every clock. A closed, vented bay with a
+  heatsink pad is sufficient; no fan.
+- Cross-board translation (per-clock ratios are approximate; `dsp_bench` is the
+  real comparator): a Cortex-A53 at 1.0 GHz ≈ A72 at 500–600 MHz → sits on the
+  STANDARD knee and will not carry EXTENDED with BlueZ on the host. A Cortex-A55
+  at 1.5–2 GHz ≈ A72 at 900–1200 MHz → fine. Moving Bluetooth into transmitter
+  modules (`hardware/requirements.md` R-1 option C) removes BlueZ + N× SBC encode
+  from this number — measure it with a `pi4b-builtin` capture (no BT speaker)
+  and subtract.
+
+### Same day, later: dsp_bench, hands-off re-run, built-in only, and the E5 pair (3 radios)
+
+Two RTL8761B dongles were added to the BT851 for the 3-radio runs (one speaker
+per radio, placed from the app — see T23). `pi4b-acceptance.sh` drove every
+capture hands-off.
+
+| Run | Clock | cpu_all p95 | busiest core p50 / p95 / max | RAM max | Temp max | Faults | Network |
+|---|---|---|---|---|---|---|---|
+| `dsp_bench` | 1800 pinned | — | **SCORE 158.4** (Pi 5: 330.8) | — | — | — | — |
+| `pi4b-1bt-600-handsoff` | 600 pinned | 36.5 % | 29.9 / 62.4 / 70.9 % | 242 MB | 45.8 °C | **none** | home |
+| `pi4b-builtin` (no BT speaker) | ondemand | 19.3 % | 16.7 / 41.5 / 49.3 % | 249 MB | 47.2 °C | none | home |
+| `pi4b-camping-3bt-600` (600 s) | ondemand | 26.4 % | 21.6 / 44.0 / 59.3 % | 242 MB | 53.6 °C | **none** | **camping, hotspot UP** |
+| `pi4b-home-3bt-600` (600 s) | ondemand | 27.6 % | 23.6 / 43.3 / 52.7 % | 248 MB | 53.6 °C | 1 underrun | home |
+
+Per-process p95 at 600 MHz (the busiest run): pulseaudio 37 %, shairport-sync
+18 %, node 4 %, nqptp 3 %, bluetoothd 1 %.
+
+**Reading:**
+
+- **E5 camping coexistence: PASS on the Pi 4B.** Matched 600 s runs, 3 BT +
+  built-in: camping 0 faults, home 1 (an underrun that coincides with the
+  connect-time "increasing latency" transient). Camping is no worse than home,
+  which is the gate. The AP was up for the whole run (`network camping /
+  hotspot UP`).
+- **The 600 MHz fault was the sync adjustment, not the chip.** Hands-off at
+  600 MHz: 0 faults, busiest core 62 % p95. The STANDARD knee on an A72 is at
+  or just below 600 MHz; "tight", not failing.
+- **Bluetooth costs the main chip almost nothing.** Built-in only 41.5 % p95;
+  1 BT speaker 41.4 %; 3 BT speakers 43.3 %. The whole BlueZ + 3 × SBC encode
+  path is ~2 points of the busiest core. PulseAudio (mixing and loopbacks) and
+  shairport-sync are the load. **Moving Bluetooth into transmitter modules
+  (`hardware/requirements.md` R-1 option C) would not buy compute** — its case
+  is cost and integration only.
+- **EXTENDED costs ~2 points over STANDARD** at ondemand. RAM peak 249 MB in
+  every configuration. 53.6 °C open-board with three radios streaming for 10
+  minutes; a vented bay is fine.
+- `dsp_bench` 158.4 against the Pi 5's 330.8 calibrates the score: a board
+  near 80 would sit on the STANDARD knee; EXTENDED wants margin above that.
+
+**Still to run:** the pinned-clock EXTENDED sweep (`pi4b-acceptance.sh
+extended` was interrupted at the preflight; 3 BT at 1200 / 900 / 600 MHz),
+T10/T10b, T12–T15, T18/T19 after the panel-service fix, T21.

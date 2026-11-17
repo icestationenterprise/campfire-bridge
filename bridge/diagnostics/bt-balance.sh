@@ -43,30 +43,43 @@ adapter_mac_of() {  # hciN -> BD address
 links_on() { hcitool -i "$1" con 2>/dev/null | awk '/ACL/ {print $3}'; }
 
 cmd_show() {
-  local overloaded=0
+  # Two different problems, both reported:
+  #   links   — more than one speaker STREAMING on one radio right now (chopping)
+  #   bonded  — more than one speaker PAIRED to one radio while another UP radio
+  #             holds none. Nothing is wrong this second if nothing is playing,
+  #             but every one of those speakers will connect to that radio the
+  #             moment it is asked to, so the pile-up is already decided.
+  local overloaded=0 stacked=0 idle_up=0
   printf '%-6s %-17s %-5s %-5s %s\n' ADAPTER ADDRESS BUS STATE "ACTIVE LINKS / BONDED"
   while IFS='|' read -r id amac bus up; do
     [ -z "$id" ] && continue
-    local links n bonded
+    local links n bonded nb
     links=$(links_on "$id" | tr '\n' ' ')
     n=$(links_on "$id" | grep -c . )
     bonded=$(btctl "$amac" 2 "devices Paired" 2>/dev/null \
              | awk '/^[[:space:]]*Device[[:space:]]/ {print $2}' \
              | sort -u | tr '\n' ' ')
+    nb=$(wc -w <<<"$bonded" | tr -d ' ')
     printf '%-6s %-17s %-5s %-5s links:[%s] bonded:[%s]\n' "$id" "$amac" "$bus" "$up" "${links% }" "${bonded% }"
     if [ "$n" -gt 1 ]; then
       overloaded=1
       echo "       ^^ $n simultaneous links on one radio — this is what causes choppy audio"
     fi
+    if [ "$nb" -gt 1 ]; then
+      stacked=1
+      echo "       ^^ $nb speakers are BONDED to this radio — they will all connect here until re-paired"
+    fi
+    [ "$up" = "UP" ] && [ "$nb" -eq 0 ] && idle_up=1
   done < <(list_adapters)
 
-  if [ "$overloaded" -eq 1 ]; then
-    echo
-    echo "FIX: move one of them to an idle dongle, e.g."
+  echo
+  if [ "$overloaded" -eq 1 ] || { [ "$stacked" -eq 1 ] && [ "$idle_up" -eq 1 ]; }; then
+    echo "FIX from the app: put the shared speaker in pairing mode and tap Pair. The bridge"
+    echo "pairs it on the emptiest UP radio first, then forgets the old bond (a failed"
+    echo "attempt changes nothing). Or from here:"
     echo "  ./bt-balance.sh move <speaker-mac> <idle-hciN>"
   else
-    echo
-    echo "Balance looks fine — at most one active audio link per dongle."
+    echo "Balance looks fine — one bond and at most one active link per radio."
   fi
 }
 

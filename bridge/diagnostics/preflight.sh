@@ -44,7 +44,9 @@ done
 
 echo
 echo "== 3. sinks exist =="
-sinks=$(pactl list short sinks 2>/dev/null)
+# The Pi's HDMI audio sink (platform-…mailbox / hdmi) is never part of the mix;
+# it is always SUSPENDED and must not count as a silent output.
+sinks=$(pactl list short sinks 2>/dev/null | grep -viE 'mailbox|hdmi')
 if [ -z "$sinks" ]; then
   bad "PulseAudio unreachable — nothing can be measured"
 else
