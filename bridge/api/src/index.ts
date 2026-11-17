@@ -260,6 +260,9 @@ export default app;
  * on A2DP and something sensible is the default sink.
  */
 async function recoverOnStartup(): Promise<void> {
+  // Radios first: a dongle that is DOWN holds no speaker and is invisible to
+  // the balancer, and after a cold boot the USB dongles are not always up yet.
+  await bluetooth.ensureAdaptersPowered().catch(e => console.warn('[startup] adapter power:', (e as Error).message));
   await party.detectBuiltinSink();
   const adopted = await party.adoptExistingGraph();
   if (adopted) await airplay.startAirplay().catch(() => {});
@@ -284,6 +287,7 @@ if (require.main === module) {
   });
 
   setTimeout(() => { recoverOnStartup().catch(e => console.error('[startup] recovery failed:', e)); }, 5_000);
+  bluetooth.startAdapterWatch();   // hot-plugged dongles come UP within 15 s, no hands needed
 
   const shutdown = (signal: string) => {
     console.log(`[process] ${signal} — shutting down`);

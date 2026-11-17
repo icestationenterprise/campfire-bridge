@@ -56,6 +56,86 @@ function speakerAdapters(snap: bluez.Snapshot): bluez.Adapter[] {
   return usb.length > 0 ? usb : up;
 }
 
+// ── Adapter power ─────────────────────────────────────────────────────────────
+
+/** The radios we would put speakers on, powered or not. */
+function eligibleAdapters(snap: bluez.Snapshot): bluez.Adapter[] {
+  const usb = snap.adapters.filter(a => a.bus === 'usb');
+  return usb.length > 0 ? usb : snap.adapters;
+}
+
+/**
+ * Power every speaker-eligible radio that is DOWN. Not locked — callers that
+ * already hold the radio lock use this directly; everyone else goes through
+ * `ensureAdaptersPowered`.
+ *
+ * Why this exists: bench finding of 2026-11-17 — two dongles plugged in after
+ * boot stayed DOWN, the load balancer (which can only use powered radios) had
+ * one radio to choose from, and all three speakers bonded to it. A DOWN radio
+ * is not a radio. If BlueZ reports the kernel's rfkill block as the reason, lift
+ * it once and retry; anything else (a dongle still initialising reports "Not
+ * Ready" for up to a minute after plug-in) is logged and retried on the next
+ * pass. Returns a snapshot taken after any change so callers see the new state.
+ */
+async function powerUpAdapters(): Promise<bluez.Snapshot> {
+  const snap = await bluez.snapshot();
+  const down = eligibleAdapters(snap).filter(a => !a.powered);
+  if (down.length === 0) return snap;
+
+  let changed = false;
+  let blocked = false;
+  for (const a of down) {
+    const r = await bluez.setPowered(a.path, true);
+    if (r.ok) { changed = true; console.log(`[bt] powered on ${a.hciId} (${a.bus})`); continue; }
+    if (/rfkill|blocked/i.test(r.message)) blocked = true;
+    else console.warn(`[bt] cannot power ${a.hciId} yet: ${r.message}`);
+  }
+
+  if (blocked) {
+    const u = await bluez.rfkillUnblock();
+    if (!u.ok) {
+      console.error(`[bt] radios are rfkill-blocked and the unblock failed (${u.message}) — re-run setup-pi.sh to install /etc/sudoers.d/campfire-rfkill`);
+    } else {
+      console.log('[bt] rfkill unblocked — powering the blocked radios');
+      await delay(1_000);
+      const again = await bluez.snapshot();
+      for (const a of eligibleAdapters(again).filter(a => !a.powered)) {
+        const r = await bluez.setPowered(a.path, true);
+        if (r.ok) { changed = true; console.log(`[bt] powered on ${a.hciId} (${a.bus})`); }
+        else console.warn(`[bt] cannot power ${a.hciId}: ${r.message}`);
+      }
+    }
+  }
+  return changed ? bluez.snapshot() : snap;
+}
+
+/** Power every radio that is down. Safe to call from anywhere; takes the radio lock. */
+export function ensureAdaptersPowered(): Promise<bluez.Snapshot> {
+  return radio.run(powerUpAdapters);
+}
+
+const ADAPTER_WATCH_MS = 15_000;
+let watchTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Keep hot-plugged radios powered without anyone touching the device. A dongle
+ * plugged in while the bridge runs is UP within one tick and the next pairing
+ * can land on it.
+ */
+export function startAdapterWatch(intervalMs = ADAPTER_WATCH_MS): void {
+  if (watchTimer) return;
+  const tick = () => {
+    ensureAdaptersPowered().catch(e => console.warn(`[bt] adapter watch: ${(e as Error).message}`));
+  };
+  watchTimer = setInterval(tick, intervalMs);
+  watchTimer.unref();
+}
+
+export function stopAdapterWatch(): void {
+  if (watchTimer) clearInterval(watchTimer);
+  watchTimer = null;
+}
+
 // ── Listing ───────────────────────────────────────────────────────────────────
 
 /** All bonded speakers across all adapters. */
@@ -118,7 +198,7 @@ function looksLikeSpeaker(d: bluez.Device): boolean {
  */
 export async function scanDevices(durationSec = 6): Promise<{ devices: DiscoveredDevice[]; scanned: boolean }> {
   return radio.run(async () => {
-    const before = await bluez.snapshot();
+    const before = await powerUpAdapters();           // a DOWN radio cannot discover anything
     const quiet  = !partyActive() && !before.devices.some(d => d.connected);
     const free   = quiet ? before.adapters.filter(a => a.powered) : [];
 
@@ -232,7 +312,7 @@ async function tryConnect(dev: bluez.Device): Promise<{ ok: true } | { ok: false
 export async function connectDevice(mac: string): Promise<void> {
   return radio.run(async () => {
     btctl.abortAll();
-    let snap = await bluez.snapshot();
+    let snap = await powerUpAdapters();               // the bonded radio must be UP to connect
     let dev  = pickDevice(snap, mac);
     if (!dev) throw new ConnectError(norm(mac), '-', 'not-paired', 'no BlueZ device object for this address');
     if (dev.connected) return;
@@ -313,14 +393,52 @@ async function pairOn(mac: string, adapter: bluez.Adapter | null): Promise<void>
   console.log(`[bt] paired and trusted ${mac} on ${target.hciId}`);
 }
 
-/** Pair and trust a new speaker on the least-loaded USB adapter. Idempotent. */
+/**
+ * If `dev` shares its radio with other bonds while a powered radio sits
+ * emptier, the adapter it should move to; otherwise null. "Emptier" means the
+ * move actually improves the spread (target has at least two fewer bonds), so
+ * two speakers on one radio move only onto a radio with none.
+ */
+function emptierAdapterFor(snap: bluez.Snapshot, dev: bluez.Device): bluez.Adapter | null {
+  const load = (p: string) => snap.devices.filter(d => d.paired && d.adapterPath === p).length;
+  const here = load(dev.adapterPath);
+  if (here <= 1) return null;
+  const better = speakerAdapters(snap)
+    .filter(a => a.path !== dev.adapterPath && load(a.path) <= here - 2)
+    .sort((a, b) => load(a.path) - load(b.path));
+  return better[0] ?? null;
+}
+
+/**
+ * Pair and trust a speaker on the least-loaded USB adapter.
+ *
+ * Radios are powered first so a freshly plugged dongle is a candidate — this is
+ * the step that spreads speakers one-per-radio, and it can only choose among
+ * radios that are UP.
+ *
+ * Already paired? Then "Pair" means "give this speaker its own radio": if it
+ * shares a radio while another sits empty, it is paired on the empty radio
+ * FIRST and the old bond is forgotten only after that succeeds, so a failed
+ * attempt (speaker not in pairing mode — each dongle is a brand-new Bluetooth
+ * identity to it) leaves everything as it was. Balanced already → no-op.
+ */
 export async function pairDevice(mac: string): Promise<void> {
   return radio.run(async () => {
     btctl.abortAll();
-    const snap = await bluez.snapshot();
+    const snap = await powerUpAdapters();
     const existing = pickDevice(snap, mac);
     if (existing?.paired) {
-      if (!existing.trusted) await bluez.setTrusted(existing.path, true);
+      const target = emptierAdapterFor(snap, existing);
+      if (!target) {
+        if (!existing.trusted) await bluez.setTrusted(existing.path, true);
+        return;
+      }
+      console.log(`[bt] ${mac} shares ${existing.hciId} with other speakers — moving it to ${target.hciId}`);
+      if (existing.connected) await bluez.disconnect(existing.path);
+      await pairOn(mac, target);                                 // throws if the speaker refuses; old bond intact
+      const r = await bluez.removeDevice(existing.adapterPath, existing.path);
+      if (!r.ok) console.warn(`[bt] ${mac} is now on ${target.hciId} but the old bond on ${existing.hciId} would not go: ${r.message}`);
+      else console.log(`[bt] ${mac} moved ${existing.hciId} → ${target.hciId}`);
       return;
     }
     await pairOn(mac, null);

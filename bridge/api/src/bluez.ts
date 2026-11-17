@@ -228,3 +228,34 @@ export async function setTrusted(devPath: string, trusted: boolean): Promise<boo
   const r = await run('busctl', ['--system', 'set-property', 'org.bluez', devPath, 'org.bluez.Device1', 'Trusted', 'b', String(trusted)]);
   return r.ok;
 }
+
+/**
+ * org.bluez.Adapter1.Powered — bring a radio up (or down). A radio that is not
+ * powered cannot hold a speaker and is invisible to the load balancer, so the
+ * bridge sets this itself instead of trusting bluetoothd's AutoEnable, which
+ * does not reliably catch a dongle plugged in after boot.
+ */
+export async function setPowered(adapterPath: string, on: boolean): Promise<CallResult> {
+  const r = await run(
+    'busctl',
+    ['--system', 'set-property', 'org.bluez', adapterPath, 'org.bluez.Adapter1', 'Powered', 'b', String(on)],
+    { timeoutMs: 15_000 },
+  );
+  if (r.ok) return { ok: true, stdout: r.stdout };
+  const m = r.stderr.match(/Failed to set property[^:]*:\s*(.+)/i);
+  return { ok: false, message: (m?.[1] ?? r.stderr).trim() || r.error || 'unknown error' };
+}
+
+/**
+ * Lift the kernel's soft block on every Bluetooth radio. Only root may write
+ * /dev/rfkill, so this goes through the single sudo rule `setup-pi.sh`
+ * installs (/etc/sudoers.d/campfire-rfkill: exactly this command, nothing
+ * else). `-n` never prompts — without the rule it fails at once and the caller
+ * logs that instead of hanging.
+ */
+export async function rfkillUnblock(): Promise<CallResult> {
+  const r = await run('sudo', ['-n', '/usr/sbin/rfkill', 'unblock', 'bluetooth'], { timeoutMs: 5_000 });
+  return r.ok
+    ? { ok: true, stdout: r.stdout }
+    : { ok: false, message: r.stderr.trim() || r.error || 'unknown error' };
+}

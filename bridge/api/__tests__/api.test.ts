@@ -24,6 +24,9 @@ jest.mock('../src/bluetooth', () => ({
   pairDevice:          jest.fn().mockResolvedValue(undefined),
   removeDevice:        jest.fn().mockResolvedValue(undefined),
   getAdapterStatus:    jest.fn().mockResolvedValue({ adapters: [] }),
+  ensureAdaptersPowered: jest.fn().mockResolvedValue({ adapters: [], devices: [] }),
+  startAdapterWatch:   jest.fn(),
+  stopAdapterWatch:    jest.fn(),
   setPartyActiveProbe: jest.fn(),
   // Real class: the connect route uses `instanceof` to decide the response shape.
   ConnectError: jest.requireActual('../src/bluetooth').ConnectError,
