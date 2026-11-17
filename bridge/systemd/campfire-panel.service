@@ -5,6 +5,14 @@ After=network.target
 [Service]
 Type=simple
 User=pi
+SupplementaryGroups=gpio
+# gpiozero must use lgpio: the sysfs GPIO interface it falls back to is gone on
+# kernel 6.x, and lgpio creates its notification pipes in the CURRENT DIRECTORY,
+# which for a system service is / — unwritable, so it fell through every backend
+# and crash-looped (bench, 2026-11-17). Give it a private writable directory.
+Environment=GPIOZERO_PIN_FACTORY=lgpio
+RuntimeDirectory=campfire-panel
+WorkingDirectory=/run/campfire-panel
 ExecStart=/usr/bin/python3 /usr/local/bin/campfire-panel.py
 Restart=always
 RestartSec=5

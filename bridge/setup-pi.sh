@@ -39,7 +39,7 @@ sudo apt install -y \
   bluetooth bluez bluez-tools iw \
   pulseaudio pulseaudio-module-bluetooth \
   avahi-daemon \
-  python3-gpiozero
+  python3-gpiozero i2c-tools
 # lgpio gives gpiozero PWM for the pulsing LED; the daemon copes without it.
 sudo apt install -y python3-lgpio 2>/dev/null || echo "python3-lgpio not available — LED will blink instead of pulse"
 # The apt shairport-sync cannot do AirPlay 2 with the nqptp we build; use source.
@@ -67,6 +67,14 @@ sudo usermod -a -G bluetooth pi
 # A fresh image soft-blocks Bluetooth; AutoEnable only works after bluetoothd
 # has re-read main.conf, so unblock, then restart.
 sudo rfkill unblock bluetooth || true
+# The bridge API (user pi) powers every radio itself over D-Bus, including
+# dongles plugged in after boot — a DOWN radio is invisible to the one-speaker-
+# per-radio balancer. If the kernel has a radio rfkill-blocked only root can
+# lift that, so allow pi exactly that one command and nothing else.
+echo 'pi ALL=(root) NOPASSWD: /usr/sbin/rfkill unblock bluetooth' | sudo tee /etc/sudoers.d/campfire-rfkill > /dev/null
+sudo chmod 0440 /etc/sudoers.d/campfire-rfkill
+sudo visudo -cf /etc/sudoers.d/campfire-rfkill > /dev/null \
+  || { echo "campfire-rfkill sudoers drop-in failed validation — removing it"; sudo rm -f /etc/sudoers.d/campfire-rfkill; }
 sudo systemctl enable bluetooth
 sudo systemctl restart bluetooth
 
@@ -173,10 +181,19 @@ step "10/12  Hardware overlays (I²S amp, I²C gauge, power button)"
 ensure_config_line "dtparam=i2s=on"
 ensure_config_line "dtoverlay=max98357a"     # built-in amp → ALSA card "MAX98357A"
 ensure_config_line "dtparam=i2c_arm=on"      # UPS HAT fuel gauge
+# The dtparam enables the controller; /dev/i2c-1 only appears once the i2c-dev
+# module is loaded (raspi-config does this by adding it to /etc/modules).
+echo i2c-dev | sudo tee /etc/modules-load.d/campfire-i2c.conf > /dev/null
+sudo modprobe i2c-dev 2>/dev/null || true
 # Power button on GPIO3 (header pin 5) to GND: a press while running asks
 # systemd-logind for a clean shutdown; a press while halted wakes the Pi
 # (GPIO3 is the only pin the firmware watches for that).
-ensure_config_line "dtoverlay=gpio-shutdown"
+# GPIO3 is also I²C1 SCL and the kernel hands it to I²C first (dmesg on the
+# bench: "pin gpio3 already requested by fe804000.i2c"), so the overlay must
+# watch another pin: GPIO5 (header pin 29). Wire the button to pins 5 AND 29 —
+# GPIO3 still wakes a halted Pi (firmware), GPIO5 shuts a running one down.
+sudo sed -i '/^dtoverlay=gpio-shutdown$/d' "$CONFIG"
+ensure_config_line "dtoverlay=gpio-shutdown,gpio_pin=5"
 
 step "11/12  Networking (WiFi power save off, camping mode) and the front panel"
 # The brcmfmac WiFi drops frames while power-saving — AirPlay stutter.

@@ -29,7 +29,7 @@ Two momentary buttons, each between a GPIO pin and ground. Either wire on either
 
 | Button | Pi pins | Positions (microSD on the left) | Does |
 |---|---|---|---|
-| **Power** | 5 (GPIO3) + 9 (GND) | inner row 3 + inner row 5 | press while running = clean shutdown (`dtoverlay=gpio-shutdown`); press while halted = wake (GPIO3 is the only pin the firmware watches) |
+| **Power** | 5 (GPIO3) **and 29 (GPIO5)** + 9 (GND) — one button, two signal wires | inner row 3, inner row 15, inner row 5 | press while halted = wake (GPIO3 is the only pin the firmware watches); press while running = clean shutdown via `dtoverlay=gpio-shutdown,gpio_pin=5`. **Why two pins (found 2026-11-17):** GPIO3 is I²C1 SCL and the kernel gives it to I²C, so the shutdown overlay cannot claim it; it watches GPIO5 instead. A press briefly grounds SCL too — harmless for a rare shutdown press. The carrier removes all this with a power latch. |
 | **Mute** | 37 (GPIO26) + 39 (GND) | inner row 19 + inner row 20 | short press = mute/unmute the built-in only; hold ≥ 1 s = mute/unmute every speaker (`campfire-panel.py`) |
 
 Decided 2026-11-16: no factory-reset button, no pairing button (pairing is

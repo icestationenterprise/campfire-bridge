@@ -22,7 +22,15 @@ import subprocess
 import time
 import urllib.request
 
-from gpiozero import Button, RGBLED
+# lgpio is the only gpiozero backend that works on current kernels (sysfs GPIO
+# is gone in 6.x), and it writes its notification pipes into the CURRENT
+# DIRECTORY. The service runs us in a RuntimeDirectory; run by hand from an
+# unwritable place, move to /tmp first. Must happen before gpiozero is imported.
+os.environ.setdefault("GPIOZERO_PIN_FACTORY", "lgpio")
+if not os.access(os.getcwd(), os.W_OK):
+    os.chdir(os.environ.get("RUNTIME_DIRECTORY") or "/tmp")
+
+from gpiozero import Button, RGBLED  # noqa: E402
 
 API           = os.environ.get("CAMPFIRE_API", "http://127.0.0.1:3000")
 ACTIVE_HIGH   = os.environ.get("LED_ACTIVE_HIGH", "0") == "1"
@@ -109,7 +117,7 @@ class Panel:
             speakers = api("GET", "/api/status").get("party", {}).get("speakers", [])
             if not speakers:
                 log("hold: no party running")
-                self.flash(RED)
+                self.flash(OFF, 2)   # nothing to do: blink off; red is for errors and "muted"
                 return
             mute = any(not s.get("muted") for s in speakers)
             api("POST", "/api/party/mute", {"muted": mute})
@@ -128,7 +136,7 @@ class Panel:
             builtin = next((s for s in speakers if s.get("mac") == BUILTIN_ID), None)
             if builtin is None:
                 log("press: built-in speaker is not in the party")
-                self.flash(RED)
+                self.flash(OFF, 2)   # nothing to do: blink off; red is for errors and "muted"
                 return
             mute = not builtin.get("muted", False)
             api("POST", "/api/party/speaker/mute", {"mac": BUILTIN_ID, "muted": mute})
